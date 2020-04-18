@@ -1,0 +1,3 @@
+<span>You have {{ player.cardsInPlay|length }} card{{ "s" if player.cardsInPlay|length != 1 }} in play:</span>
+<img id="cardInPlay0" src="{{ url_for('static', filename='/images/cards/actions/' + ('flipped_over' if player.cardsInPlay|length == 0 else player.cardsInPlay[0].uid|string) + '.jpg') }}" style="max-width: 20%">
+<img id="cardInPlay1" src="{{ url_for('static', filename='/images/cards/actions/' + ('flipped_over' if player.cardsInPlay|length <= 1 else player.cardsInPlay[1].uid|string) + '.jpg') }}" style="max-width: 20%">

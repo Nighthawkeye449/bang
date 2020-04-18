@@ -1,0 +1,220 @@
+{
+  "bang": {
+    "cardtype": "regular",
+    "requiresTarget": true,
+    "suitValues": [
+      "A diamond",
+      "7 club",
+      "10 diamond",
+      "A heart",
+      "4 club",
+      "K heart",
+      "8 club",
+      "J diamond",
+      "Q heart",
+      "9 diamond",
+      "A spade",
+      "3 diamond",
+      "8 diamond",
+      "9 club",
+      "K diamond",
+      "7 diamond",
+      "6 diamond",
+      "3 club",
+      "6 club",
+      "2 diamond",
+      "5 club",
+      "Q diamond",
+      "4 diamond",
+      "2 club",
+      "5 diamond"
+    ]
+  },
+  "mancato": {
+    "cardtype": "regular",
+    "requiresTarget": false,
+    "suitValues": [
+      "6 spade",
+      "A club",
+      "J club",
+      "4 spade",
+      "3 spade",
+      "7 spade",
+      "Q club",
+      "K club",
+      "10 club",
+      "5 spade",
+      "2 spade",
+      "8 spade"
+    ]
+  },
+  "panico": {
+    "cardtype": "regular",
+    "requiresTarget": true,
+    "suitValues": [
+      "Q heart",
+      "A heart",
+      "J heart",
+      "8 diamond"
+    ]
+  },
+  "birra": {
+    "cardtype": "regular",
+    "requiresTarget": false,
+    "suitValues": [
+      "9 heart",
+      "8 heart",
+      "6 heart",
+      "7 heart",
+      "10 heart",
+      "J heart"
+    ]
+  },
+  "emporio": {
+    "cardtype": "regular",
+    "requiresTarget": false,
+    "suitValues": [
+      "Q spade",
+      "9 club"
+    ]
+  },
+  "cat_balou": {
+    "cardtype": "regular",
+    "requiresTarget": true,
+    "suitValues": [
+      "K heart",
+      "J diamond",
+      "9 diamond",
+      "10 diamond"
+    ]
+  },
+  "gatling": {
+    "cardtype": "regular",
+    "requiresTarget": false,
+    "suitValues": [
+      "10 heart"
+    ]
+  },
+  "duello": {
+    "cardtype": "regular",
+    "requiresTarget": true,
+    "suitValues": [
+      "J spade",
+      "8 club",
+      "Q diamond"
+    ]
+  },
+  "indians": {
+    "cardtype": "regular",
+    "requiresTarget": false,
+    "cardrange": -1,
+    "suitValues": [
+      "A diamond",
+      "K diamond"
+    ]
+  },
+  "saloon": {
+    "cardtype": "regular",
+    "requiresTarget": false,
+    "suitValues": [
+      "5 heart"
+    ]
+  },
+  "diligenza": {
+    "cardtype": "regular",
+    "requiresTarget": false,
+    "suitValues": [
+      "9 spade",
+      "9 spade"
+    ]
+  },
+  "wells_fargo": {
+    "cardtype": "regular",
+    "requiresTarget": false,
+    "suitValues": [
+      "3 heart"
+    ]
+  },
+  "barile": {
+    "cardtype": "blue",
+    "requiresTarget": false,
+    "suitValues": [
+      "Q spade",
+      "K spade"
+    ]
+  },
+  "scope": {
+    "cardtype": "blue",
+    "requiresTarget": false,
+    "suitValues": [
+      "A spade"
+    ]
+  },
+  "mustang": {
+    "cardtype": "blue",
+    "requiresTarget": false,
+    "suitValues": [
+      "8 heart",
+      "9 heart"
+    ]
+  },
+  "prigione": {
+    "cardtype": "special",
+    "requiresTarget": true,
+    "suitValues": [
+      "10 spade",
+      "4 heart",
+      "J spade"
+    ]
+  },
+  "dynamite": {
+    "cardtype": "special",
+    "requiresTarget": false,
+    "suitValues": [
+      "2 heart"
+    ]
+  },
+    "volcanic": {
+    "cardtype": "gun",
+    "requiresTarget": false,
+    "range": 1,
+    "suitValues": [
+      "10 spade",
+      "10 club"
+    ]
+  },
+  "schofield": {
+    "cardtype": "gun",
+    "requiresTarget": false,
+    "range": 2,
+    "suitValues": [
+      "J club",
+      "K spade",
+      "Q club"
+    ]
+  },
+    "remington": {
+    "cardtype": "gun",
+    "requiresTarget": false,
+    "range": 3,
+    "suitValues": [
+      "K club"
+    ]
+  },
+  "rev_carabine": {
+    "cardtype": "gun",
+    "requiresTarget": false,
+    "range": 4,
+    "suitValues": [
+      "A club"
+    ]
+  },
+  "winchester": {
+    "cardtype": "gun",
+    "requiresTarget": false,
+    "range": 5,
+    "suitValues": [
+      "8 spade"
+    ]
+  }
+}

@@ -1,0 +1,52 @@
+{% extends "SKELETON.html" %}
+{% block content %}
+    <style>.player_column { width: {{ '35' if playerInfoList|length==4 else ('45' if playerInfoList|length==5 else '55') }}%; } </style>{{ player_count }}
+    <body>
+        <div class="outer">
+            <div id="info_modal" class="modal fade" role="dialog" data-keyboard="false" data-backdrop="static"></div>
+            <div id="question_modal" title="" style="display: none"></div>
+            <div class="row" id="topHalfDiv" style="background: blue">
+                <div class="column" style="width: 30%;">
+                    <div class="row" style="border: 1px solid red">
+                        <span id="usernameSpan">{{ player.username }}</span>
+                        <span id="currentTurnSpan">Current Turn: </span><span id="currentTurnUsernameSpan">{{ playerInfoList[0].username }}</span>
+                    </div>
+                    <div class="row" style="border: 1px solid green">
+                        <div id="cardsInHandCarousel" class="carousel slide">
+                          
+                          <div id="cardsInHandCarouselInnerDiv" class="carousel-inner">
+                            {{ cardsInHandTemplate }}
+                          </div>
+
+                          <!-- Controls -->
+                          <a class="left carousel-control" href="#cardsInHandCarousel" role="button" data-slide="prev">
+                            <span class="glyphicon glyphicon-chevron-left" aria-hidden="true"></span>
+                            <span class="sr-only">Previous</span>
+                          </a>
+                          <a class="right carousel-control" href="#cardsInHandCarousel" role="button" data-slide="next">
+                            <span class="glyphicon glyphicon-chevron-right" aria-hidden="true"></span>
+                            <span class="sr-only">Next</span>
+                          </a>
+
+                        </div>
+                    </div>
+                </div>
+                <div class="column" style="width: 30%; border: 1px solid blue">
+                    <div id="cardsInPlayDiv" class="row" style="border: 1px solid pink;">
+                        {{ cardsInPlayTemplate }}
+                    </div>
+                    <div class="row" style="border: 1px solid yellow">
+                        <span>Discard pile:</span>
+                        <img id="discardCardImage" src="{{ url_for('static', filename='/images/cards/actions/' + (discardUidString if discardUidString|length > 0 else 'flipped_over') + '.jpg') }}" style="max-width: 20%">
+                    </div>
+                </div>
+                <div id="updateActionDiv" class="column vertical-scroll" style="width: 40%; border: 1px solid purple;">
+                    <ul id="updateActionList"></ul>
+                </div>
+            </div>
+            <div class="row" id="bottomHalfDiv">
+                {{ playerInfoListTemplate }}
+            </div>
+        </div>
+    </body>
+{% endblock %}
