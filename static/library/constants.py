@@ -1,5 +1,3 @@
-import utils
-
 SHERIFF = "Sheriff"
 VICE = "Vice"
 OUTLAW = "Outlaw"
@@ -76,9 +74,9 @@ QUESTION_CARD_ON_TABLE = "Which one of {}'s cards on the table do you choose for
 QUESTION_IN_PLAY = "You already have 2 cards in play! What do you want to do?"
 QUESTION_REPLACE_GUN = "You already have a gun in play! What do you want to do?"
 QUESTION_CARD_IN_PLAY = "Which of your 2 cards in play do you want to replace?"
-QUESTION_BARILE_MANCATO = "{} played a Bang against you, but you didn't draw a heart for Barile, so you still need a Mancato. How do you want to react?"
-QUESTION_SLAB_BARILE_ONE = "{} played a Bang against you and you drew a heart for Barile, so you still need one Mancato. How do you want to react?"
-QUESTION_SLAB_BARILE_TWO = "{} played a Bang against you but you didn't draw a heart for Barile, so you still need two Mancatos. How do you want to react?"
+QUESTION_BARILE_MANCATO = "You didn't draw a heart for Barile against {}'s Bang, so you still need a Mancato. How do you want to react?"
+QUESTION_SLAB_BARILE_ONE = "You drew a heart for Barile against {}'s Bang, but you still need one Mancato. How do you want to react?"
+QUESTION_SLAB_BARILE_TWO = "You didn't draw a heart for Barile against {}'s Bang, so you still need two Mancatos. How do you want to react?"
 
 # Constants for possible responses to the above questions.
 FROM_THE_DECK = "From the deck."
@@ -92,10 +90,11 @@ PLAY_TWO_MANCATOS = "Play 2 Mancatos."
 LOSE_A_LIFE = "Lose a life."
 KEEP_CURRENT_CARDS = "Keep my current cards."
 REPLACE_A_CARD = "Replace one of my cards."
-KEEP_GUN = "Keep my current gun."
-REPLACE_GUN = "Discard my current gun and play my new one."
+KEEP_GUN = "Keep my {}."
+REPLACE_GUN = "Discard my {} and play the {}."
 
-# Constants for socket message names.
+# Constants for outgoing socket message names.
+START_GAME = "start_game"
 SHOW_INFO_MODAL = "show_info_modal"
 SHOW_QUESTION_MODAL = "show_question_modal"
 SHOW_WAITING_MODAL = "show_waiting_modal"
@@ -105,25 +104,40 @@ RESET_CARD_CLICK_FUNCTIONS = "reset_card_click_functions"
 UPDATE_CARD_HAND = "update_card_hand"
 UPDATE_CARDS_IN_PLAY = "update_cards_in_play"
 UPDATE_DISCARD_PILE = "update_discard_pile"
-UPDATE_PLAYER_IMAGE = "update_player_image"
 UPDATE_PLAYER_LIST = "update_player_list"
 DISCARD_CLICK = "discard_click"
 END_YOUR_TURN = "end_your_turn"
-FINISH_DISCARDING_CARDS = "finish_discarding_cards"
 RELOAD_PLAY_PAGE = "reload_play_page"
 SLEEP = "sleep"
 
+# Constants for incoming socket message names.
+CONNECTED = "connected"
+START_BUTTON_CLICKED = "start_button_clicked"
+SET_CHARACTER = "set_character"
+CARD_WAS_DISCARDED = "card_was_discarded"
+VALIDATE_CARD_CHOICE = "validate_card_choice"
+INFO_MODAL_UNDEFINED = "info_modal_undefined"
+QUESTION_MODAL_UNDEFINED = "question_modal_undefined"
+QUESTION_MODAL_ANSWERED = "question_modal_answered"
+BLUR_CARD_PLAYED = "blur_card_played"
+EMPORIO_CARD_PICKED = "emporio_card_picked"
+ENDING_TURN = "ending_turn"
+DISCARDING_CARD = "discarding_card"
+USE_SPECIAL_ABILITY = "use_special_ability"
+
 # Constants for modals and the update screen.
 QUESTION_CARD_FORMAT = "{} ({} of {}s)"
+ALREADY_MAX_LIVES = "You already have your maximum number of lives!"
 CLICK_ON_CARD = "Click on the card in your hand that you want to use."
 DREW_2_CARDS = "{} drew 2 cards from the deck."
 PICKED_UP_FROM_EMPORIO = "{} picked up {} from Emporio."
 WAITING_DUELLO_REACTION = "Waiting for {} to decide how to react to Duello..."
 BANG_AS_MANCATO = "Bang (as a Mancato)"
 MANCATO_AS_BANG = "Mancato (as a Bang)"
+SID_KETCHUM_INFO = "Click on the 2 cards in your hand that you want to discard in order to gain a life."
 
 OK_MSG = "OK"
-JSON_GAME_PATH = utils.getLocalFilePath("game.json")
 EMPTY_RESPONSE = ('', 204)
+FLIPPED_OVER = "flipped_over"
 CARD_IMAGES_PATH = "/images/cards/actions/{}.jpg"
 ROLE_IMAGES_PATH = "/images/cards/roles/{}.jpg"

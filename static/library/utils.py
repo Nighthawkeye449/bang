@@ -1,10 +1,13 @@
+from card import Card, GunCard
+from character import Character
 from flask import Markup, render_template
+from pathlib import Path
 import constants
 import datetime
 import inspect
+import json
 import numbers
 import re
-import sys
 
 def log(msg, file):
 	with open(getLocalFilePath("./logs/{}.txt".format(file)), 'a+') as f:
@@ -34,6 +37,37 @@ def logGameplay(msg):
 def logError(msg):
 	log("ERROR: {}".format(msg), "error")
 
+def loadCards():
+	cardList = list()
+	with open(getLocalFilePath("./static/json/cards.json")) as p:
+		cardDict = json.load(p)
+		uid = 1
+
+		for cardName in cardDict:
+			for suitValue in cardDict[cardName]['suitValues']:
+				t = cardDict[cardName]['cardtype']
+				if t == constants.GUN_CARD:
+					cardList.append(GunCard(cardName, uid, constants.GUN_CARD, cardDict[cardName]['requiresTarget'], cardDict[cardName]['range'], suitValue))
+				else:
+					cardList.append(Card(cardName, uid, t, cardDict[cardName]['requiresTarget'], suitValue))
+				
+				uid += 1
+
+	return cardList
+
+def loadCharacters(includeExtras=False):
+	filePaths = [getLocalFilePath("static/json/characters.json")]
+	if includeExtras:
+		filePaths.append(getLocalFilePath("static/json/characters_extra.json"))
+
+	characterList = list()
+	for filePath in filePaths:
+		with open(filePath) as p:
+			characterDict = json.load(p)
+			characterList.extend([Character(**characterDict[c]) for c in characterDict]) # Load the JSON directly into Character objects.
+
+	return characterList
+
 def getListOfConstants():
 	return [item for item in dir(constants) if not item.startswith("__")]
 
@@ -47,7 +81,8 @@ def cleanUsernameInput(s):
 	return s
 
 def getLocalFilePath(path=""):
-	return "{}/{}".format(sys.path[0], path)
+	pathToRoot = "\\".join(str(Path(__file__).parent.absolute()).split("\\")[:-2])
+	return "{}/{}".format(pathToRoot, path)
 
 def getObjectFromList(function, l):
 	filtered = list(filter(function, l))
@@ -109,7 +144,7 @@ def createCardOptionsQuestion(self, player, options, question):
 
 # Tuples to show information in players' information modals.
 def createInfoTuples(text, header=None, recipients=[], cards=None):
-	logGameplay("Making info tuples for {} with text \"{}\" and cards {}".format([r.username for r in recipients], text, [c.name for c in cards] if cards != None else []))
+	logGameplay("Making info tuples for {} with text \"{}\"{}".format([r.username for r in recipients], text, " and cards {}".format([c.name for c in cards]) if cards != None else ""))
 	cardImagesTemplate = None if cards == None else Markup(render_template('/modals/card_images.html', cards=cards))
 	data = {'html': render_template('/modals/info.html', text=text, header=header, cardsTemplate=cardImagesTemplate)}
 
@@ -135,13 +170,15 @@ def createUpdateTuple(updateString):
 	return createEmitTuples(constants.UPDATE_ACTION, {'update': updateString}, list())[0]
 
 # Tuples to blur all but certain types of card in a player's hand.
-def createCardBlurTuples(player, cardName):
+def createCardBlurTuples(player, cardName, msg=None):
 	if player.character.name == constants.CALAMITY_JANET and cardName in [constants.BANG, constants.MANCATO]:
 		cardNames = [constants.BANG, constants.MANCATO]
 	else:
 		cardNames = [cardName]
 
-	return createInfoTuples(constants.CLICK_ON_CARD, recipients=[player]) + createEmitTuples(constants.BLUR_CARD_SELECTION, {'cardNames': cardNames}, recipients=[player])
+	msg = constants.CLICK_ON_CARD if msg == None else msg
+
+	return createInfoTuples(msg, recipients=[player]) + createEmitTuples(constants.BLUR_CARD_SELECTION, {'cardNames': cardNames}, recipients=[player])
 
 # Tuples to show Emporio options and let the next player up pick by clicking on the card.
 def createEmporioTuples(alivePlayers, cardsLeft, playerPicking):
@@ -172,7 +209,7 @@ def createCardsInPlayTuple(player):
 
 # Tuple to update the image of the top discard card for everybody.
 def createDiscardTuple(discardTop):
-	return createEmitTuples(constants.UPDATE_DISCARD_PILE, {'path': constants.CARD_IMAGES_PATH.format(discardTop.uid)}, recipients=[])[0]
+	return createEmitTuples(constants.UPDATE_DISCARD_PILE, {'path': constants.CARD_IMAGES_PATH.format(discardTop.uid if discardTop != None else constants.FLIPPED_OVER)}, recipients=[])[0]
 
 # Tuple to update the player order/lives/etc. for everybody.
 def createPlayerInfoListTuple(playerInfoList):
@@ -207,7 +244,7 @@ def consolidateTuples(tuples):
 		
 		logServer("Consolidated SLEEPS in the tuples: {}".format(tuples))
 	
-	# If there are multiple waiting messages for a player, combine them into one general waiting message.
+	# If there are multiple waiting messages for the current player, combine them into one general waiting message.
 	# Also, if there are any info tuples for that player, they come before the waiting messages this way.
 	waitingModalTuples = [tup for tup in tuples if tup[0] == constants.SHOW_WAITING_MODAL]
 	if len(waitingModalTuples) > 0:
@@ -220,6 +257,14 @@ def consolidateTuples(tuples):
 			tuples.append(createWaitingModalTuple(waitingModalTuples[0][2], "Waiting for {} players...".format(len(waitingModalTuples))))
 
 		logServer("Consolidated waiting/info messages: {}".format(tuples))
+
+	# If a player got multiple updates to his/her card carousel, just use the last (i.e. most updated) one.
+	carouselDict = dict()
+	for t in tuples:
+		if t[0] == constants.UPDATE_CARD_HAND:
+			carouselDict[t[2].username] = t # Overwrite any older version.
+
+	tuples = [t for t in tuples if t[0] != constants.UPDATE_CARD_HAND or t in carouselDict.values()]
 
 	return tuples
 

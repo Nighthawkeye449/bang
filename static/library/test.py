@@ -1,15 +1,15 @@
-from card import Card, GunCard
 from character import Character
 from constants import *
 from flask import Flask, render_template
 from flask_testing import TestCase
-from gameplay import Gameplay, loadCards
+from gameplay import Gameplay
 from html import unescape
 from playergame import PlayerGame
 
 import jinjafunctions
 import json
 import unittest
+import utils
 
 game = Gameplay()
 players = {'A': PlayerGame('A'), 'B': PlayerGame('B'), 'C': PlayerGame('C'), 'D': PlayerGame('D'), 'E': PlayerGame('E'), 'F': PlayerGame('F'), 'G': PlayerGame('G')}
@@ -86,7 +86,7 @@ def setDefaults(uid=None, numPlayers=7):
 
 def loadCharacter(name):
     characterList = list()
-    with open(utils.getLocalFilePath("../json/characters.json")) as p:
+    with open(utils.getLocalFilePath("./static/json/characters.json")) as p:
         characterDict = json.load(p)
         characterList.extend([Character(**characterDict[c]) for c in characterDict])
 
@@ -155,7 +155,7 @@ def countEmitTypeToRecipient(tuples, emitType, recipient):
 class TestGameplay(TestCase):
 
     def create_app(self):
-        app = Flask(__name__, template_folder=utils.getLocalFilePath('../../templates'))
+        app = Flask(__name__, template_folder=utils.getLocalFilePath('/templates'))
         app.config['TESTING'] = True
 
         # Set to 0 to have the OS pick the port.
@@ -312,6 +312,10 @@ class TestGameplay(TestCase):
     #     self.assertEqual(players['A'].cardsInHand, [game.getCardByUid(1)])
     #     self.assertEqual(game.discardPile, [])
     #     self.assertTrue(game.currentCard == None)
+
+    # # Use a Bang where the first target selected isn't valid, so another selection is needed.
+    # def testBang9(self):
+    #     self.assertTrue(False)
 
 
 
@@ -480,7 +484,7 @@ class TestGameplay(TestCase):
     #     self.assertEqual(game.currentCard, None)
 
     # # Duello where the target could respond with a Bang but chooses not to play it.
-    # def testDuelloOneOpponentWithNoBangs(self):
+    # def testDuelloOneOpponentWithABang(self):
     #     setDefaults(numPlayers=2)
     #     setPlayerCardsInHand({'A': [55], 'B': [1]})
 
@@ -536,7 +540,7 @@ class TestGameplay(TestCase):
     #     self.assertEqual(countEmitTypeToRecipient(tuples, SHOW_QUESTION_MODAL, players['A']), 1)
     #     self.assertEqual(countEmitTypeToRecipient(tuples, SHOW_INFO_MODAL, players['B']), 1)
     #     self.assertEqual(countEmitTypeToRecipient(tuples, SHOW_WAITING_MODAL, players['B']), 1)
-    #     self.assertTrue([t[1]['question'] for t in tuples if t[0] == SHOW_QUESTION_MODAL and t[2] == players['A']][0] == QUESTION_DUELLO_BANG_REACTION.format('B'))
+        # self.assertEqual([t[1]['question'] for t in tuples if t[0] == SHOW_QUESTION_MODAL and t[2] == players['A']][0], QUESTION_DUELLO_BANG_REACTION.format('B'))
 
     #     tuples = game.processQuestionResponse('A', QUESTION_DUELLO_BANG_REACTION.format('B'), LOSE_A_LIFE)
     #     self.assertEqual(getEmitTypes(tuples), {SHOW_INFO_MODAL, UPDATE_ACTION, UPDATE_PLAYER_LIST})
@@ -1256,7 +1260,7 @@ class TestGameplay(TestCase):
     #         game.drawPile.append(nonHeartCard)
 
     #         tuples = game.validateCardChoice('A', attackingUid)
-    #         self.assertEqual(getEmitTypes(tuples), {SHOW_INFO_MODAL, UPDATE_PLAYER_LIST, UPDATE_DISCARD_PILE, UPDATE_ACTION, UPDATE_CARD_HAND})
+    #         self.assertEqual(getEmitTypes(tuples), {SHOW_INFO_MODAL, SHOW_WAITING_MODAL, UPDATE_PLAYER_LIST, UPDATE_DISCARD_PILE, UPDATE_ACTION, UPDATE_CARD_HAND})
     #         self.assertEqual(countEmitTypeToRecipient(tuples, SHOW_INFO_MODAL, players['A']), 2 if attackingUid == 1 else 1)
     #         self.assertEqual(countEmitTypeToRecipient(tuples, UPDATE_CARD_HAND, players['A']), 1)
     #         self.assertEqual(countEmitTypeToRecipient(tuples, SHOW_INFO_MODAL, players['B']), 2)
@@ -1304,7 +1308,7 @@ class TestGameplay(TestCase):
     #     game.drawPile.extend([heartCard, nonHeartCard])
 
     #     tuples = game.validateCardChoice('A', 54)
-    #     self.assertEqual(getEmitTypes(tuples), {SHOW_INFO_MODAL, UPDATE_PLAYER_LIST, UPDATE_DISCARD_PILE, UPDATE_ACTION, UPDATE_CARD_HAND})
+    #     self.assertEqual(getEmitTypes(tuples), {SHOW_INFO_MODAL, SHOW_WAITING_MODAL, UPDATE_PLAYER_LIST, UPDATE_DISCARD_PILE, UPDATE_ACTION, UPDATE_CARD_HAND})
     #     self.assertEqual(countEmitTypeToRecipient(tuples, SHOW_INFO_MODAL, players['A']), 2)
     #     self.assertEqual(countEmitTypeToRecipient(tuples, SHOW_INFO_MODAL, players['B']), 2)
     #     self.assertEqual(countEmitTypeToRecipient(tuples, SHOW_INFO_MODAL, players['C']), 1)
@@ -1324,7 +1328,6 @@ class TestGameplay(TestCase):
     # # Have a player unsuccessfully draw a Barile against a Bang and Gatling but still avoid it by using a Mancato.
     # def testUnsuccessfulBarileWithMancato(self):
     #     self.assertTrue(False)
-
 
 
 
@@ -1503,7 +1506,7 @@ class TestGameplay(TestCase):
     #     self.assertEqual(game.currentCard, None)
 
     # # Unsuccessfully playing a Prigione against a jailed player.
-    # def testPrigioneAgainstNonJailedPlayer(self):
+    # def testPrigioneAgainstJailedPlayer(self):
     #     setDefaults()
     #     setPlayerCardsInHand({'A': [69]})
     #     setPlayerSpecialCards({'D': [70]})
@@ -1524,7 +1527,7 @@ class TestGameplay(TestCase):
     #     self.assertEqual(game.currentCard, None)
 
     # # Unsuccessfully playing a Prigione against the Sheriff.
-    # def testPrigioneAgainstNonJailedPlayer(self):
+    # def testPrigioneAgainstSheriff(self):
     #     setDefaults()
     #     game.rotatePlayerOrder()
     #     setPlayerCardsInHand({'B': [69]})
@@ -1761,9 +1764,44 @@ class TestGameplay(TestCase):
     #         self.assertEqual(game.discardPile, [game.getCardByUid(uid)])
     #         self.assertEqual(game.currentCard, None)
 
-    # El Gringo: Steal from a player's hand after taking damage from his/her Duello.
+    # # El Gringo: Steal from a player's hand after taking damage from his/her Duello.
     # def testElGringoAgainstDuello(self):
-    #     self.assertTrue(False)
+    #     setDefaults(numPlayers=2)
+    #     setPlayerCharacter('B', EL_GRINGO)
+    #     setPlayerCardsInHand({'A': [1, 55]})
+    #     expectedAttackerInfo = "B stole a Bang from your hand"
+    #     expectedElGringoInfo = "You stole a Bang from A's hand"
+    #     expectedUpdate = "B stole a card from A's hand using El Gringo's ability."
+
+
+    #     tuples = game.validateCardChoice('A', 55)
+    #     self.assertTrue(any([expectedAttackerInfo in t[1]['html'] for t in tuples if t[0] == SHOW_INFO_MODAL and t[2] == players['A']]))
+    #     self.assertTrue(any([expectedElGringoInfo in unescape(t[1]['html']) for t in tuples if t[0] == SHOW_INFO_MODAL and t[2] == players['B']]))
+    #     self.assertTrue(expectedUpdate in [t[1]['update'] for t in tuples if t[0] == UPDATE_ACTION])
+
+    #     self.assertEqual(players['B'].lives, 3)
+
+    #     self.assertEqual(players['A'].cardsInHand, [])
+    #     self.assertEqual(players['B'].cardsInHand, [game.getCardByUid(1)])
+    #     self.assertEqual(game.discardPile, [game.getCardByUid(55)])
+    #     self.assertEqual(game.currentCard, None)
+
+    # # El Gringo: Don't steal from a player's hand after taking damage in his/her own Duello.
+    # def testElGringoAgainstDuello(self):
+    #     setDefaults(numPlayers=2)
+    #     setPlayerCharacter('A', EL_GRINGO)
+    #     setPlayerCardsInHand({'A': [55], 'B': [1, 30]})
+
+    #     game.validateCardChoice('A', 55)
+
+    #     tuples = game.processQuestionResponse('B', QUESTION_DUELLO_REACTION.format('A'), PLAY_A_BANG)
+
+    #     self.assertEqual(players['A'].lives, 4)
+
+    #     self.assertEqual(players['A'].cardsInHand, [])
+    #     self.assertEqual(players['B'].cardsInHand, [game.getCardByUid(30)])
+    #     self.assertEqual(game.discardPile, [game.getCardByUid(55), game.getCardByUid(1)])
+    #     self.assertEqual(game.currentCard, None)
 
     # # El Gringo: Don't steal anything from a player's hand after taking damage if s/he has no cards to steal.
     # def testElGringoUnsuccessful(self):
@@ -1854,10 +1892,11 @@ class TestGameplay(TestCase):
     # def testJesseJonesNotUsingAbilityHavingNoChoice(self):
     #     setDefaults()
     #     setPlayerCharacter('B', JESSE_JONES)
-    #     expectedJesseJonesInfo = "you were forced to draw 2 cards from the deck".format()
+    #     expectedJesseJonesInfo = "nobody has cards to draw from".format()
     #     expectedCardsDrawn = game.drawPile[-2:][::-1]
 
     #     tuples = game.startNextTurn('A')
+    #     self.assertEqual(getEmitTypes(tuples), {SHOW_INFO_MODAL, UPDATE_ACTION, UPDATE_PLAYER_LIST, RELOAD_PLAY_PAGE})
     #     self.assertEqual(countEmitTypeToRecipient(tuples, SHOW_INFO_MODAL, players['B']), 1)
     #     self.assertEqual(countEmitTypeToRecipient(tuples, SHOW_QUESTION_MODAL, players['B']), 0)
     #     self.assertTrue(any([expectedJesseJonesInfo in unescape(t[1]['html']) for t in tuples if t[0] == SHOW_INFO_MODAL and t[2] == players['B']]))
@@ -1928,13 +1967,11 @@ class TestGameplay(TestCase):
     #     setPlayerCharacter('B', JOURDONNAIS)
     #     setPlayerCardsInHand({'A': [1]})
     #     setPlayerCardsInPlay({'B': [64]})
-    #     expectedJourdonnaisInfo = "You didn't draw a heart against A's Bang either time"
     #     expectedUpdate = "B tried to avoid the Bang with a Barile but didn't draw a heart either time."
     #     cardsToDraw = [getCardsOfASuit(DIAMOND, 1)[0], getCardsOfASuit(SPADE, 1)[0]]
     #     game.drawPile.extend(cardsToDraw)
 
     #     tuples = game.validateCardChoice('A', 1)
-    #     self.assertTrue(any([expectedJourdonnaisInfo in unescape(t[1]['html']) for t in tuples if t[0] == SHOW_INFO_MODAL and t[2] == players['B']]))
     #     self.assertTrue(expectedUpdate in [t[1]['update'] for t in tuples if t[0] == UPDATE_ACTION])
 
     #     self.assertEqual(players['B'].lives, 3)
@@ -1961,62 +1998,744 @@ class TestGameplay(TestCase):
     #         self.assertEqual(game.discardPile, [])
     #         self.assertEqual(game.currentCard, None)
 
-    # Lucky Duke: Successfully "draw!" by choosing the useful option.
+    # # Lucky Duke: Successfully "draw!" by choosing the useful option.
+    # def testLuckyDukeSuccessful(self):
+    #     setDefaults(numPlayers=2)
+    #     setPlayerCharacter('B', LUCKY_DUKE)
+    #     setPlayerCardsInHand({'A': [1]})
+    #     setPlayerCardsInPlay({'B': [64]})
+        
+    #     heartCard = getCardsOfASuit(HEART, 1)[0]
+    #     clubCard = getCardsOfASuit(CLUB, 1)[0]
+    #     game.drawPile.extend([heartCard, clubCard])
 
-    # Lucky Duke: Unsuccessfully "draw!" by not getting a useful choice.
+    #     tuples = game.validateCardChoice('A', 1)
+    #     questionTuple = [t for t in tuples if t[0] == SHOW_QUESTION_MODAL and t[2] == players['B']][0]
+    #     self.assertEqual(countEmitTypeToRecipient(tuples, SHOW_QUESTION_MODAL, players['B']), 1)
+    #     self.assertEqual(questionTuple[1]['question'], QUESTION_LUCKY_DUKE.format('Bang'))
+    #     self.assertEqual(questionTuple[1]['option1'], clubCard.getQuestionString())
+    #     self.assertEqual(questionTuple[1]['option2'], heartCard.getQuestionString())
 
-    # Paul Regret: Be out of range for a 1-range Bang without a Mustang in play.
+    #     tuples = game.processQuestionResponse('B', QUESTION_LUCKY_DUKE.format('Bang'), heartCard.getQuestionString())
+    #     self.assertTrue(any(["B drew a heart for Barile and avoided your Bang!" in t[1]['html'] for t in tuples if t[0] == SHOW_INFO_MODAL and t[2] == players['A']]))
+    #     self.assertTrue(any(["You drew a heart for Barile and avoided the Bang!" in t[1]['html'] for t in tuples if t[0] == SHOW_INFO_MODAL and t[2] == players['B']]))
 
-    # Paul Regret: Be in range for a 2-range Bang without a Mustang in play.
+    #     self.assertEqual(players['B'].lives, 4)
+    #     self.assertEqual(game.discardPile, [game.getCardByUid(1), clubCard, heartCard])
+    #     self.assertEqual(game.currentCard, None)
 
-    # Paul Regret: Be out of range for a 2-range Bang with a Mustang in play.
+    # # Lucky Duke: Unsuccessfully "draw!" by not getting a useful choice.
+    # def testLuckyDukeUnsuccessful(self):
+    #     setDefaults(numPlayers=2)
+    #     setPlayerCharacter('B', LUCKY_DUKE)
+    #     setPlayerCardsInHand({'A': [1]})
+    #     setPlayerCardsInPlay({'B': [64]})
+        
+    #     diamondCard = getCardsOfASuit(DIAMOND, 1)[0]
+    #     clubCard = getCardsOfASuit(CLUB, 1)[0]
+    #     game.drawPile.extend([diamondCard, clubCard])
 
-    # Pedro Ramirez: Draw one card from the discard pile and one from the deck.
+    #     tuples = game.validateCardChoice('A', 1)
+    #     questionTuple = [t for t in tuples if t[0] == SHOW_QUESTION_MODAL and t[2] == players['B']][0]
+    #     self.assertEqual(countEmitTypeToRecipient(tuples, SHOW_QUESTION_MODAL, players['B']), 1)
+    #     self.assertEqual(questionTuple[1]['question'], QUESTION_LUCKY_DUKE.format('Bang'))
+    #     self.assertEqual(questionTuple[1]['option1'], clubCard.getQuestionString())
+    #     self.assertEqual(questionTuple[1]['option2'], diamondCard.getQuestionString())
 
-    # Pedro Ramirez: Draw both cards from the deck.
+    #     tuples = game.processQuestionResponse('B', QUESTION_LUCKY_DUKE.format('Bang'), diamondCard.getQuestionString())
+    #     self.assertEqual(countEmitTypeToRecipient(tuples, SHOW_WAITING_MODAL, players['A']), 1)
+    #     self.assertTrue(any(["B took the hit" in t[1]['html'] for t in tuples if t[0] == SHOW_INFO_MODAL and t[2] == players['A']]))
+    #     self.assertTrue(any(["You didn't draw a heart for Barile" in unescape(t[1]['html']) for t in tuples if t[0] == SHOW_INFO_MODAL and t[2] == players['B']]))
+    #     self.assertTrue(any(["You were hit by the Bang" in t[1]['html'] for t in tuples if t[0] == SHOW_INFO_MODAL and t[2] == players['B']]))
 
-    # Rose Doolan: Successfully Bang a 2-away player without a Scope in play.
+    #     self.assertEqual(players['B'].lives, 3)
+    #     self.assertEqual(game.discardPile, [game.getCardByUid(1), clubCard, diamondCard])
+    #     self.assertEqual(game.currentCard, None)
 
-    # Rose Doolan: Unsuccessfully Bang a 3-away player without a Scope in play.
+    # # Paul Regret: Be out of range for a 1-range Bang without a Mustang in play.
+    # def testPaulRegretOutOfRange1(self):
+    #     setDefaults()
+    #     setPlayerCharacter('B', PAUL_REGRET)
+    #     setPlayerCardsInHand({'A': [1]})
 
-    # Rose Doolan. Successfully Bang a 3-away player with a Scope in play.
+    #     game.validateCardChoice('A', 1)
+    #     tuples = game.processQuestionResponse('A', QUESTION_WHO_TO_SHOOT, 'B')
+    #     self.assertTrue(any(["B is out of range" in t[1]['html'] for t in tuples if t[0] == SHOW_INFO_MODAL and t[2] == players['A']]))
 
-    # Sid Ketchum: Successfully discard two cards to regain one life point.
+    #     self.assertEqual(players['B'].lives, 4)
+    #     self.assertEqual(game.currentCard, None)
 
-    # Sid Ketchum: Successfully discard four cards to regain two life points.
+    # # Paul Regret: Be in range for a 2-range Bang without a Mustang in play.
+    # def testPaulRegretInRange(self):
+    #     setDefaults()
+    #     setPlayerCharacter('B', PAUL_REGRET)
+    #     setPlayerCardsInHand({'A': [1]})
+    #     setPlayerCardsInPlay({'A': [75]})
 
-    # Sid Ketchum: Unsuccessfully try to discard two cards with none/one in hand.
+    #     game.validateCardChoice('A', 1)
+    #     game.processQuestionResponse('A', QUESTION_WHO_TO_SHOOT, 'B')
 
-    # Slab the Killer: Successfully Bang against a target who only has one Mancato.
+    #     self.assertEqual(players['B'].lives, 3)
+    #     self.assertEqual(players['A'].cardsInHand, [])
+    #     self.assertEqual(game.discardPile, [game.getCardByUid(1)])
+    #     self.assertTrue(game.currentCard == None)
 
-    # Slab the Killer: Unsuccessfully Bang against a target who has two Mancatos and plays both.
+    # # Paul Regret: Be out of range for a 2-range Bang with a Mustang in play.
+    # def testPaulRegretOutOfRange2(self):
+    #     setDefaults()
+    #     setPlayerCharacter('C', PAUL_REGRET)
+    #     setPlayerCardsInHand({'A': [1]})
+    #     setPlayerCardsInPlay({'C': [67]})
 
-    # Slab the Killer: Successfully Bang against a target who has two Mancatos but doesn't play them.
+    #     game.validateCardChoice('A', 1)
+    #     tuples = game.processQuestionResponse('A', QUESTION_WHO_TO_SHOOT, 'C')
+    #     self.assertTrue(any(["C is out of range" in t[1]['html'] for t in tuples if t[0] == SHOW_INFO_MODAL and t[2] == players['A']]))
 
-    # Slab the Killer: Successfully Bang against a target who draws a heart for "draw!".
+    #     self.assertEqual(players['C'].lives, 4)
+    #     self.assertEqual(game.currentCard, None)
 
-    # Slab the Killer: Unsuccessfully Bang against a target who both draws a heart for "draw!" and plays a Mancato.
+    # # Pedro Ramirez: Draw one card from the discard pile and one from the deck.
+    # def testPedroRamirezSpecial(self):
+    #     setDefaults()
+    #     setPlayerCharacter('B', PEDRO_RAMIREZ)
+    #     discardCard = game.drawPile.pop()
+    #     game.discardPile.append(discardCard)
+    #     drawCard = game.drawPile[-1]
+    #     expectedPedroInfo = "You drew {} from the discard pile and {} from the deck".format(discardCard.getDeterminerString(), drawCard.getDeterminerString())
+    #     expectedUpdate = "B drew {} from the discard pile and 1 card from the deck.".format(discardCard.getDeterminerString())
 
-    # Slab the Killer: Successfully avoid his Gatling using only 1 Mancato.
+    #     tuples = game.startNextTurn('A')
+    #     self.assertEqual(countEmitTypeToRecipient(tuples, SHOW_QUESTION_MODAL, players['B']), 1)
 
-    # Suzy Lafayette: Draw a card as soon as last card was played in turn.
+    #     tuples = game.processQuestionResponse('B', QUESTION_PEDRO_RAMIREZ, FROM_DISCARD)
+    #     self.assertEqual(getEmitTypes(tuples), {SHOW_INFO_MODAL, UPDATE_ACTION, UPDATE_DISCARD_PILE, UPDATE_CARD_HAND})
+    #     self.assertTrue(expectedUpdate in [t[1]['update'] for t in tuples if t[0] == UPDATE_ACTION])
+    #     self.assertTrue(any([expectedPedroInfo in t[1]['html'] for t in tuples if t[0] == SHOW_INFO_MODAL and t[2] == players['B']]))
 
-    # Suzy Lafayette: Draw a card after playing last card from hand in response to an attacking card.
+    #     self.assertEqual(players['B'].cardsInHand, [discardCard, drawCard])
+    #     self.assertEqual(game.discardPile, [])
+    #     self.assertEqual(game.currentCard, None)
 
-    # Suzy Lafayette: Wait until after a Duello is finished to draw a new card.
+    # # Pedro Ramirez: Draw both cards from the deck by choice.
+    # def testPedroRamirezNormalByChoice(self):
+    #     setDefaults()
+    #     setPlayerCharacter('B', PEDRO_RAMIREZ)
+    #     discardCard = game.drawPile.pop()
+    #     game.discardPile.append(discardCard)
+    #     drawnCards = game.drawPile[-2:][::-1]
+    #     expectedPedroInfo = "You drew {} from the deck".format(utils.convertCardsDrawnToString(drawnCards))
+    #     expectedUpdate = "B drew 2 cards from the deck."
 
-    # Suzy Lafayette: Draw a card after having last one stolen by a Cat Balou / Panico.
+    #     tuples = game.startNextTurn('A')
+    #     self.assertEqual(countEmitTypeToRecipient(tuples, SHOW_QUESTION_MODAL, players['B']), 1)
 
-    # Suzy Lafayette: Draw a card after playing a Birra to stay alive.
+    #     tuples = game.processQuestionResponse('B', QUESTION_PEDRO_RAMIREZ, FROM_THE_DECK)
+    #     self.assertEqual(getEmitTypes(tuples), {SHOW_INFO_MODAL, UPDATE_ACTION, UPDATE_CARD_HAND})
+    #     self.assertTrue(expectedUpdate in [t[1]['update'] for t in tuples if t[0] == UPDATE_ACTION])
+    #     self.assertTrue(any([expectedPedroInfo in t[1]['html'] for t in tuples if t[0] == SHOW_INFO_MODAL and t[2] == players['B']]))
 
-    # Suzy Lafayette: Draw a card after having last one stolen by El Gringo.
+    #     self.assertEqual(players['B'].cardsInHand, drawnCards)
+    #     self.assertEqual(game.discardPile, [discardCard])
+    #     self.assertEqual(game.currentCard, None)
 
-    # Suzy Lafayette: Don't draw a card after discarding final card at the end of turn.
+    # # Pedro Ramirez: Draw both cards from the deck having no choice.
+    # def testPedroRamirezNormalNoChoice(self):
+    #     setDefaults()
+    #     setPlayerCharacter('B', PEDRO_RAMIREZ)
+    #     drawnCards = game.drawPile[-2:][::-1]
+    #     expectedPedroInfo = "You drew {} from the deck (the discard pile is empty right now)".format(utils.convertCardsDrawnToString(drawnCards))
+    #     expectedUpdate = "B drew 2 cards from the deck.".format()
 
-    # Vulture Sam: Take all the cards from a player's hand and from in front of him/her when s/he gets eliminated.
+    #     tuples = game.startNextTurn('A')
+    #     self.assertEqual(getEmitTypes(tuples), {SHOW_INFO_MODAL, UPDATE_ACTION, UPDATE_PLAYER_LIST, RELOAD_PLAY_PAGE})
+    #     self.assertTrue(expectedUpdate in [t[1]['update'] for t in tuples if t[0] == UPDATE_ACTION])
+    #     self.assertTrue(any([expectedPedroInfo in t[1]['html'] for t in tuples if t[0] == SHOW_INFO_MODAL and t[2] == players['B']]))
 
-    # Willy the Kid: Successfully play two Bangs in one turn.
-    
+    #     self.assertEqual(players['B'].cardsInHand, drawnCards)
+    #     self.assertEqual(game.discardPile, [])
+    #     self.assertEqual(game.currentCard, None)
+
+    # # Rose Doolan: Successfully Bang a 2-away player without a Scope in play.
+    # def testRoseDoolanSuccessful1(self):
+    #     setDefaults()
+    #     setPlayerCharacter('A', ROSE_DOOLAN)
+    #     setPlayerCardsInHand({'A': [1]})
+
+    #     game.validateCardChoice('A', 1)
+    #     tuples = game.processQuestionResponse('A', QUESTION_WHO_TO_SHOOT, 'C')
+
+    #     self.assertEqual(players['C'].lives, 3)
+    #     self.assertEqual(players['A'].cardsInHand, [])
+    #     self.assertEqual(game.currentCard, None)
+
+    # # Rose Doolan: Unsuccessfully Bang a 3-away player without a Scope in play.
+    # def testRoseDoolanUnsuccessful(self):
+    #     setDefaults()
+    #     setPlayerCharacter('A', ROSE_DOOLAN)
+    #     setPlayerCardsInHand({'A': [1]})
+
+    #     game.validateCardChoice('A', 1)
+    #     tuples = game.processQuestionResponse('A', QUESTION_WHO_TO_SHOOT, 'D')
+    #     self.assertEqual(len(tuples), 1)
+    #     self.assertEqual(getEmitTypes(tuples), {SHOW_INFO_MODAL})
+    #     self.assertTrue("D is out of range" in tuples[0][1]['html'])
+
+    #     self.assertEqual(players['A'].cardsInHand, [game.getCardByUid(1)])
+    #     self.assertEqual(game.discardPile, [])
+    #     self.assertTrue(game.currentCard == None)
+
+    # # Rose Doolan. Successfully Bang a 3-away player with a Scope in play.
+    # def testRoseDoolanSuccessful2(self):
+    #     setDefaults()
+    #     setPlayerCharacter('A', ROSE_DOOLAN)
+    #     setPlayerCardsInHand({'A': [1]})
+    #     setPlayerCardsInPlay({'A': [66]})
+
+    #     game.validateCardChoice('A', 1)
+    #     tuples = game.processQuestionResponse('A', QUESTION_WHO_TO_SHOOT, 'D')
+
+    #     self.assertEqual(players['D'].lives, 3)
+    #     self.assertEqual(players['A'].cardsInHand, [])
+    #     self.assertEqual(game.currentCard, None)
+
+    # # Sid Ketchum: Successfully discard only two cards automatically to regain one life point.
+    # def testSidKetchumSuccessful1(self):
+    #     setDefaults()
+    #     setPlayerCharacter('A', SID_KETCHUM)
+    #     setPlayerLives({'A': 4})
+    #     setPlayerCardsInHand({'A': [20, 30]})
+    #     expectedInfo = "You've discarded 2 cards and gained a life."
+    #     expectedUpdate = "A used Sid Ketchum's ability to discard 2 cards and gain a life."
+
+    #     tuples = game.useSpecialAbility('A')
+    #     self.assertEqual(getEmitTypes(tuples), {SHOW_INFO_MODAL, UPDATE_PLAYER_LIST} | CARD_PLAYED_TUPLES)
+    #     self.assertTrue(any([expectedInfo in unescape(t[1]['html']) for t in tuples if t[0] == SHOW_INFO_MODAL and t[2] == players['A']]))
+    #     self.assertTrue(expectedUpdate in [t[1]['update'] for t in tuples if t[0] == UPDATE_ACTION])
+
+    #     self.assertEqual(players['A'].lives, 5)
+    #     self.assertEqual(players['A'].cardsInHand, [])
+    #     self.assertEqual(game.specialAbilityCards[SID_KETCHUM], None)
+    #     self.assertEqual(game.discardPile, [game.getCardByUid(20), game.getCardByUid(30)])
+    #     self.assertEqual(game.currentCard, None)
+
+    # # Sid Ketchum: Successfully discard four cards to regain two life points.
+    # def testSidKetchumSuccessful2(self):
+    #     setDefaults()
+    #     setPlayerCharacter('A', SID_KETCHUM)
+    #     setPlayerLives({'A': 2})
+    #     setPlayerCardsInHand({'A': [20, 30, 40, 50, 60]})
+    #     expectedInfo = "You've discarded 2 cards and gained a life."
+    #     expectedUpdate = "A used Sid Ketchum's ability to discard 2 cards and gain a life."
+
+    #     for uidPair in [(20, 30), (50, 60)]:
+    #         tuples = game.useSpecialAbility('A')
+    #         self.assertTrue(any([SID_KETCHUM_INFO in t[1]['html'] for t in tuples if t[0] == SHOW_INFO_MODAL and t[2] == players['A']]))
+            
+    #         tuples = game.playerDiscardingCard('A', uidPair[0])
+    #         self.assertEqual(getEmitTypes(tuples), {UPDATE_CARD_HAND, DISCARD_CLICK})
+            
+    #         tuples = game.playerDiscardingCard('A', uidPair[1])
+    #         self.assertEqual(getEmitTypes(tuples), {SHOW_INFO_MODAL, UPDATE_PLAYER_LIST} | CARD_PLAYED_TUPLES)
+
+    #     self.assertEqual(players['A'].lives, 4)
+    #     self.assertEqual(players['A'].cardsInHand, [game.getCardByUid(40)])
+    #     self.assertEqual(game.specialAbilityCards[SID_KETCHUM], None)
+    #     self.assertEqual(game.discardPile, [game.getCardByUid(20), game.getCardByUid(30), game.getCardByUid(50), game.getCardByUid(60)])
+    #     self.assertEqual(game.currentCard, None)
+
+    # # Sid Ketchum: Unsuccessfully try to discard two cards with none/one in hand.
+    # def testSidKetchumUnsuccessful1(self):
+    #     setDefaults()
+    #     setPlayerCharacter('A', SID_KETCHUM)
+    #     setPlayerLives({'A': 4})
+
+    #     for uids in [[], [20]]:
+    #         setPlayerCardsInHand({'A': uids})
+    #         expectedInfo = "You don't have enough cards to use your special ability right now."
+
+    #         tuples = game.useSpecialAbility('A')
+    #         self.assertTrue(any([expectedInfo in unescape(t[1]['html']) for t in tuples if t[0] == SHOW_INFO_MODAL and t[2] == players['A']]))
+
+    #         self.assertEqual(players['A'].lives, 4)
+    #         self.assertEqual(players['A'].cardsInHand, [game.getCardByUid(uid) for uid in uids])
+    #         self.assertEqual(game.specialAbilityCards[SID_KETCHUM], None)
+    #         self.assertEqual(game.discardPile, [])
+    #         self.assertEqual(game.currentCard, None)
+
+    # # Sid Ketchum: Unsuccessfully try to discard two cards when already at the life limit.
+    # def testSidKetchumUnsuccessful2(self):
+    #     setDefaults()
+    #     setPlayerCharacter('A', SID_KETCHUM)
+    #     setPlayerLives({'A': 5})
+    #     setPlayerCardsInHand({'A': [20, 30]})
+
+    #     tuples = game.useSpecialAbility('A')
+    #     self.assertTrue(any([ALREADY_MAX_LIVES in unescape(t[1]['html']) for t in tuples if t[0] == SHOW_INFO_MODAL and t[2] == players['A']]))
+
+    #     self.assertEqual(players['A'].lives, 5)
+    #     self.assertEqual(players['A'].cardsInHand, [game.getCardByUid(20), game.getCardByUid(30)])
+    #     self.assertEqual(game.specialAbilityCards[SID_KETCHUM], None)
+    #     self.assertEqual(game.discardPile, [])
+    #     self.assertEqual(game.currentCard, None)
+
+    # # Slab the Killer: Successfully Bang against a target who only has one Mancato.
+    # def testSlabTheKillerSuccessful1(self):
+    #     setDefaults(numPlayers=2)
+    #     setPlayerCharacter('A', SLAB_THE_KILLER)
+    #     setPlayerCardsInHand({'A': [1], 'B': [26]})
+    #     expectedSlabInfo = "B took the hit"
+    #     expectedOpponentInfo = "You were hit by the Bang"
+
+    #     tuples = game.validateCardChoice('A', 1)
+    #     self.assertTrue(any([expectedSlabInfo in t[1]['html'] for t in tuples if t[0] == SHOW_INFO_MODAL and t[2] == players['A']]))
+    #     self.assertTrue(any([expectedOpponentInfo in t[1]['html'] for t in tuples if t[0] == SHOW_INFO_MODAL and t[2] == players['B']]))
+
+    #     self.assertEqual(players['B'].lives, 3)
+
+    #     self.assertEqual(players['A'].cardsInHand, [])
+    #     self.assertEqual(players['B'].cardsInHand, [game.getCardByUid(26)])
+    #     self.assertEqual(game.discardPile, [game.getCardByUid(1)])
+
+    # # Slab the Killer: Unsuccessfully Bang against a target who has two Mancatos and plays both.
+    # def testSlabTheKillerUnsuccessful1(self):
+    #     setDefaults(numPlayers=2)
+    #     setPlayerCharacter('A', SLAB_THE_KILLER)
+    #     setPlayerCardsInHand({'A': [1], 'B': [26, 27]})
+    #     expectedSlabInfo = "B played 2 Mancatos to avoid your Bang!"
+    #     expectedOpponentInfo = "You automatically played your only 2 Mancatos left"
+    #     expectedUpdate = "B played 2 Mancatos and avoided A's Bang."
+
+    #     tuples = game.validateCardChoice('A', 1)
+    #     self.assertEqual(countEmitTypeToRecipient(tuples, SHOW_WAITING_MODAL, players['A']), 1)
+    #     self.assertEqual(countEmitTypeToRecipient(tuples, SHOW_QUESTION_MODAL, players['B']), 1)
+        
+    #     questionTuple = [t for t in tuples if t[0] == SHOW_QUESTION_MODAL and t[2] == players['B']][0]
+    #     self.assertTrue(PLAY_A_MANCATO not in questionTuple[1].values())
+    #     self.assertTrue(PLAY_TWO_MANCATOS in questionTuple[1].values())
+    #     self.assertTrue(LOSE_A_LIFE in questionTuple[1].values())
+
+    #     tuples = game.processQuestionResponse('B', QUESTION_BANG_REACTION.format('A'), PLAY_TWO_MANCATOS)
+    #     self.assertTrue(any([expectedSlabInfo in unescape(t[1]['html']) for t in tuples if t[0] == SHOW_INFO_MODAL and t[2] == players['A']]))
+    #     self.assertTrue(any([expectedOpponentInfo in t[1]['html'] for t in tuples if t[0] == SHOW_INFO_MODAL and t[2] == players['B']]))
+    #     self.assertTrue(expectedUpdate in [t[1]['update'] for t in tuples if t[0] == UPDATE_ACTION])
+
+    #     self.assertEqual(players['B'].lives, 4)
+
+    #     self.assertEqual(players['A'].cardsInHand, [])
+    #     self.assertEqual(players['B'].cardsInHand, [])
+    #     self.assertEqual(game.discardPile, [game.getCardByUid(1), game.getCardByUid(26), game.getCardByUid(27)])
+    #     self.assertEqual(game.specialAbilityCards[SLAB_THE_KILLER], None)
+    #     self.assertEqual(game.currentCard, None)
+
+    # # Slab the Killer: Unsuccessfully Bang against a target who has 3+ Mancatos and chooses two to play.
+    # def testSlabTheKillerUnsuccessful2(self):
+    #     setDefaults(numPlayers=2)
+    #     setPlayerCharacter('A', SLAB_THE_KILLER)
+    #     setPlayerCardsInHand({'A': [1], 'B': [26, 27, 28]})
+    #     expectedSlabInfo = "B played 2 Mancatos to avoid your Bang!"
+    #     expectedUpdate = "B played 2 Mancatos and avoided A's Bang."
+
+    #     game.validateCardChoice('A', 1)
+        
+    #     tuples = game.processQuestionResponse('B', QUESTION_BANG_REACTION.format('A'), PLAY_TWO_MANCATOS)
+    #     self.assertEqual(countEmitTypeToRecipient(tuples, BLUR_CARD_SELECTION, players['B']), 1)
+    #     self.assertTrue(any(["Click on the first Mancato in your hand" in t[1]['html'] for t in tuples if t[0] == SHOW_INFO_MODAL and t[2] == players['B']]))
+        
+    #     tuples = game.processBlurCardSelection('B', 27)
+    #     self.assertEqual(countEmitTypeToRecipient(tuples, BLUR_CARD_SELECTION, players['B']), 1)
+    #     self.assertTrue(any(["Click on the second Mancato in your hand" in t[1]['html'] for t in tuples if t[0] == SHOW_INFO_MODAL and t[2] == players['B']]))
+
+    #     tuples = game.processBlurCardSelection('B', 28)
+    #     self.assertTrue(any([expectedSlabInfo in unescape(t[1]['html']) for t in tuples if t[0] == SHOW_INFO_MODAL and t[2] == players['A']]))
+    #     self.assertTrue(expectedUpdate in [t[1]['update'] for t in tuples if t[0] == UPDATE_ACTION])
+
+    #     self.assertEqual(players['B'].lives, 4)
+
+    #     self.assertEqual(players['A'].cardsInHand, [])
+    #     self.assertEqual(players['B'].cardsInHand, [game.getCardByUid(26)])
+    #     self.assertEqual(game.discardPile, [game.getCardByUid(1), game.getCardByUid(27), game.getCardByUid(28)])
+    #     self.assertEqual(game.specialAbilityCards[SLAB_THE_KILLER], None)
+    #     self.assertEqual(game.currentCard, None)
+
+    # # Slab the Killer: Unsuccessfuly Bang against Calamity Janet using 2 Bangs as Mancatos.
+    # def testSlabTheKillerAgainstCalamityJanet(self):
+    #     setDefaults(numPlayers=2)
+    #     setPlayerCharacter('A', SLAB_THE_KILLER)
+    #     setPlayerCharacter('B', CALAMITY_JANET)
+    #     setPlayerCardsInHand({'A': [1], 'B': [2, 3, 4]})
+    #     expectedSlabInfo = "B played 2 Bangs (as Mancatos) to avoid your Bang!"
+    #     expectedUpdate = "B played 2 Bangs (as Mancatos) and avoided A's Bang."
+
+    #     game.validateCardChoice('A', 1)
+
+    #     game.processQuestionResponse('B', QUESTION_BANG_REACTION.format('A'), PLAY_TWO_MANCATOS)
+
+    #     game.processBlurCardSelection('B', 2)
+
+    #     tuples = game.processBlurCardSelection('B', 4)
+    #     self.assertTrue(any([expectedSlabInfo in unescape(t[1]['html']) for t in tuples if t[0] == SHOW_INFO_MODAL and t[2] == players['A']]))
+    #     self.assertTrue(expectedUpdate in [t[1]['update'] for t in tuples if t[0] == UPDATE_ACTION])
+
+    #     self.assertEqual(players['B'].lives, 4)
+
+    #     self.assertEqual(players['A'].cardsInHand, [])
+    #     self.assertEqual(players['B'].cardsInHand, [game.getCardByUid(3)])
+    #     self.assertEqual(game.discardPile, [game.getCardByUid(1), game.getCardByUid(2), game.getCardByUid(4)])
+    #     self.assertEqual(game.specialAbilityCards[SLAB_THE_KILLER], None)
+    #     self.assertEqual(game.currentCard, None)
+
+    # # Slab the Killer: Successfully Bang against a target who has two Mancatos but doesn't play them.
+    # def testSlabTheKillerSuccessful2(self):
+    #     setDefaults(numPlayers=2)
+    #     setPlayerCharacter('A', SLAB_THE_KILLER)
+    #     setPlayerCardsInHand({'A': [1], 'B': [26, 27]})
+    #     expectedSlabInfo = "B played 2 Mancatos to avoid your Bang!"
+    #     expectedUpdate = "B played 2 Mancatos and avoided A's Bang."
+
+    #     game.validateCardChoice('A', 1)
+        
+    #     tuples = game.processQuestionResponse('B', QUESTION_BANG_REACTION.format('A'), LOSE_A_LIFE)
+
+    #     self.assertEqual(players['B'].lives, 3)
+
+    #     self.assertEqual(players['A'].cardsInHand, [])
+    #     self.assertEqual(players['B'].cardsInHand, [game.getCardByUid(26), game.getCardByUid(27)])
+    #     self.assertEqual(game.discardPile, [game.getCardByUid(1)])
+    #     self.assertEqual(game.specialAbilityCards[SLAB_THE_KILLER], None)
+    #     self.assertEqual(game.currentCard, None)
+
+    # # Slab the Killer: Successfully Bang against a target who draws a heart for "draw!" but doesn't choose to play a Mancato.
+    # def testSlabTheKillerSuccessfulAgainstBarile(self):
+    #     setDefaults(numPlayers=2)
+    #     setPlayerCharacter('A', SLAB_THE_KILLER)
+    #     setPlayerCardsInHand({'A': [1], 'B': [26]})
+    #     setPlayerCardsInPlay({'B': [64]})
+    #     heartCard = getCardsOfASuit(HEART, 1)[0]
+    #     game.drawPile.append(heartCard)
+    #     question = QUESTION_SLAB_BARILE_ONE.format('A')
+
+    #     tuples = game.validateCardChoice('A', 1)
+    #     questionTuple = [t for t in tuples if t[0] == SHOW_QUESTION_MODAL and t[2] == players['B']][0]
+    #     self.assertEqual(questionTuple[1]['question'], question)
+        
+    #     game.processQuestionResponse('B', question, LOSE_A_LIFE)
+
+    #     self.assertEqual(players['B'].lives, 3)
+
+    #     self.assertEqual(players['A'].cardsInHand, [])
+    #     self.assertEqual(players['B'].cardsInHand, [game.getCardByUid(26)])
+    #     self.assertEqual(game.discardPile, [game.getCardByUid(1), heartCard])
+    #     self.assertEqual(game.specialAbilityCards[SLAB_THE_KILLER], None)
+    #     self.assertEqual(game.currentCard, None)
+
+    # # Slab the Killer: Unsuccessfully Bang against a target who both draws a heart for "draw!" and plays a Mancato.
+    # def testSlabTheKillerUnsuccessfulAgainstBarile1(self):
+    #     setDefaults(numPlayers=2)
+    #     setPlayerCharacter('A', SLAB_THE_KILLER)
+    #     setPlayerCardsInHand({'A': [1], 'B': [26]})
+    #     setPlayerCardsInPlay({'B': [64]})
+    #     heartCard = getCardsOfASuit(HEART, 1)[0]
+    #     game.drawPile.append(heartCard)
+    #     question = QUESTION_SLAB_BARILE_ONE.format('A')
+
+    #     game.validateCardChoice('A', 1)
+        
+    #     game.processQuestionResponse('B', question, PLAY_A_MANCATO)
+
+    #     self.assertEqual(players['B'].lives, 4)
+
+    #     self.assertEqual(players['A'].cardsInHand, [])
+    #     self.assertEqual(players['B'].cardsInHand, [])
+    #     self.assertEqual(game.discardPile, [game.getCardByUid(1), heartCard, game.getCardByUid(26)])
+    #     self.assertEqual(game.specialAbilityCards[SLAB_THE_KILLER], None)
+    #     self.assertEqual(game.currentCard, None)
+
+    # # Slab the Killer: Unsuccessfully Bang against a target who doesn't draw a heart for "draw!" but plays two Mancatos.
+    # def testSlabTheKillerUnsuccessfulAgainstBarile2(self):
+    #     setDefaults(numPlayers=2)
+    #     setPlayerCharacter('A', SLAB_THE_KILLER)
+    #     setPlayerCardsInHand({'A': [1], 'B': [26, 27]})
+    #     setPlayerCardsInPlay({'B': [64]})
+    #     diamondCard = getCardsOfASuit(DIAMOND, 1)[0]
+    #     game.drawPile.append(diamondCard)
+
+    #     game.validateCardChoice('A', 1)
+
+    #     game.processQuestionResponse('B', QUESTION_SLAB_BARILE_TWO.format('A'), PLAY_TWO_MANCATOS)
+
+    #     self.assertEqual(players['B'].lives, 4)
+
+    #     self.assertEqual(players['A'].cardsInHand, [])
+    #     self.assertEqual(players['B'].cardsInHand, [])
+    #     self.assertEqual(game.discardPile, [game.getCardByUid(1), diamondCard, game.getCardByUid(26), game.getCardByUid(27)])
+    #     self.assertEqual(game.specialAbilityCards[SLAB_THE_KILLER], None)
+    #     self.assertEqual(game.currentCard, None)
+
+    # # Slab the Killer: Successfully avoid his Gatling using only 1 Mancato.
+    # def testSlabTheKillerGatling(self):
+    #     setDefaults(numPlayers=2)
+    #     setPlayerCharacter('A', SLAB_THE_KILLER)
+    #     setPlayerCardsInHand({'A': [54], 'B': [26]})
+    #     question = QUESTION_GATLING_REACTION.format('A')
+
+    #     tuples = game.validateCardChoice('A', 54)
+    #     self.assertEqual(countEmitTypeToRecipient(tuples, SHOW_QUESTION_MODAL, players['B']), 1)
+    #     questionTuple = [t for t in tuples if t[0] == SHOW_QUESTION_MODAL and t[2] == players['B']][0]
+    #     self.assertEqual(questionTuple[1]['question'], question)
+
+    #     game.processQuestionResponse('B', question, PLAY_A_MANCATO)
+
+    #     self.assertEqual(players['B'].lives, 4)
+
+    #     self.assertEqual(players['A'].cardsInHand, [])
+    #     self.assertEqual(players['B'].cardsInHand, [])
+    #     self.assertEqual(game.discardPile, [game.getCardByUid(54), game.getCardByUid(26)])
+    #     self.assertEqual(game.specialAbilityCards[SLAB_THE_KILLER], None)
+    #     self.assertEqual(game.currentCard, None)
+
+    # # Slab the Killer: Use a Bang against Jourdonnais, who successfully draws a heart on the second card and then chooses a Mancato to play.
+    # def testSlabTheKillerAgainstJourdonnais(self):
+    #     setDefaults(numPlayers=2)
+    #     setPlayerCharacter('A', SLAB_THE_KILLER)
+    #     setPlayerCharacter('B', JOURDONNAIS)
+    #     setPlayerCardsInHand({'A': [1], 'B': [26, 27]})
+    #     setPlayerCardsInPlay({'B': [64]})
+    #     heartCard = getCardsOfASuit(HEART, 1)[0]
+    #     spadeCard = getCardsOfASuit(SPADE, 1)[0]
+    #     game.drawPile.extend([heartCard, spadeCard])
+    #     question = QUESTION_SLAB_BARILE_ONE.format('A')
+
+    #     game.validateCardChoice('A', 1)
+        
+    #     game.processQuestionResponse('B', question, PLAY_A_MANCATO)
+
+    #     game.processBlurCardSelection('B', 26)
+
+    #     self.assertEqual(players['B'].lives, 4)
+
+    #     self.assertEqual(players['A'].cardsInHand, [])
+    #     self.assertEqual(players['B'].cardsInHand, [game.getCardByUid(27)])
+    #     self.assertEqual(game.discardPile, [game.getCardByUid(1), spadeCard, heartCard, game.getCardByUid(26)])
+    #     self.assertEqual(game.specialAbilityCards[SLAB_THE_KILLER], None)
+    #     self.assertEqual(game.currentCard, None)
+
+    # # Suzy Lafayette: Draw a card as soon as last card was played in turn.
+    # def testSuzyLafayetteDrawingInTurn(self):
+    #     setDefaults()
+    #     setPlayerCharacter('A', SUZY_LAFAYETTE)
+    #     setPlayerCardsInHand({'A': [66]})
+    #     expectedCardDrawn = game.drawPile[-1]
+    #     expectedInfo = "You drew a card using Suzy Lafayette's ability!"
+    #     expectedUpdate = "A drew a card using Suzy Lafayette's ability."
+
+    #     tuples = game.validateCardChoice('A', 66)
+    #     self.assertEqual(getEmitTypes(tuples), {SHOW_INFO_MODAL, UPDATE_CARD_HAND, UPDATE_ACTION, UPDATE_CARDS_IN_PLAY})
+    #     self.assertTrue(any([expectedInfo in unescape(t[1]['html']) for t in tuples if t[0] == SHOW_INFO_MODAL and t[2] == players['A']]))
+    #     self.assertTrue(expectedUpdate in [t[1]['update'] for t in tuples if t[0] == UPDATE_ACTION])
+
+    #     self.assertEqual(players['A'].cardsInHand, [expectedCardDrawn])
+    #     self.assertTrue(expectedCardDrawn not in game.drawPile)
+    #     self.assertEqual(game.currentCard, None)
+
+    # # Suzy Lafayette: Draw a card after playing last card from hand in response to an attacking card.
+    # def testSuzyLafayetteDrawingAfterResponse(self):
+    #     expectedInfo = "You drew a card using Suzy Lafayette's ability!"
+    #     expectedUpdate = "B drew a card using Suzy Lafayette's ability."
+
+    #     for (attackingUid, responseUid, question, answer) in \
+    #         [(1, 26, QUESTION_BANG_REACTION, PLAY_A_MANCATO),
+    #         (54, 26, QUESTION_GATLING_REACTION, PLAY_A_MANCATO),
+    #         (58, 1, QUESTION_INDIANS_REACTION, PLAY_A_BANG)]:
+            
+
+    #         setDefaults(numPlayers=2)
+    #         setPlayerCharacter('B', SUZY_LAFAYETTE)
+    #         setPlayerCardsInHand({'A': [attackingUid], 'B': [responseUid]})
+    #         expectedCardDrawn = game.drawPile[-1]
+
+    #         game.validateCardChoice('A', attackingUid)
+
+    #         tuples = game.processQuestionResponse('B', question.format('A'), answer)
+    #         self.assertEqual(getEmitTypes(tuples), {SHOW_INFO_MODAL, UPDATE_CARD_HAND, UPDATE_ACTION, UPDATE_DISCARD_PILE})
+    #         self.assertTrue(any([expectedInfo in unescape(t[1]['html']) for t in tuples if t[0] == SHOW_INFO_MODAL and t[2] == players['B']]))
+    #         self.assertTrue(expectedUpdate in [t[1]['update'] for t in tuples if t[0] == UPDATE_ACTION])
+
+    #         self.assertEqual(players['B'].cardsInHand, [expectedCardDrawn])
+    #         self.assertTrue(expectedCardDrawn not in game.drawPile)
+    #         self.assertEqual(game.currentCard, None)
+
+    # # Suzy Lafayette: Wait until after a Duello (winning by default) is finished to draw a new card.
+    # def testSuzyLafayetteDuelloWin(self):
+    #     setDefaults(numPlayers=2)
+    #     setPlayerCharacter('A', SUZY_LAFAYETTE)
+    #     setPlayerCardsInHand({'A': [1, 55], 'B': [2]})
+    #     expectedCardDrawn = game.drawPile[-1]
+    #     expectedInfo = "You drew a card using Suzy Lafayette's ability!"
+    #     expectedUpdate = "A drew a card using Suzy Lafayette's ability."
+
+    #     game.validateCardChoice('A', 55)
+    #     self.assertEqual(players['A'].cardsInHand, [game.getCardByUid(1)])
+
+    #     game.processQuestionResponse('B', QUESTION_DUELLO_REACTION.format('A'), PLAY_A_BANG)
+
+    #     tuples = game.processQuestionResponse('A', QUESTION_DUELLO_BANG_REACTION.format('B'), PLAY_A_BANG)
+
+    #     self.assertEqual(getEmitTypes(tuples), {SHOW_INFO_MODAL, UPDATE_CARD_HAND, UPDATE_ACTION, UPDATE_DISCARD_PILE, UPDATE_PLAYER_LIST})
+    #     self.assertTrue(any([expectedInfo in unescape(t[1]['html']) for t in tuples if t[0] == SHOW_INFO_MODAL and t[2] == players['A']]))
+    #     self.assertTrue(expectedUpdate in [t[1]['update'] for t in tuples if t[0] == UPDATE_ACTION])
+
+    #     self.assertEqual(players['A'].cardsInHand, [expectedCardDrawn])
+    #     self.assertTrue(expectedCardDrawn not in game.drawPile)
+    #     self.assertEqual(game.currentCard, None)
+
+    # # Suzy Lafayette: Wait until after a Duello (winning by choice) is finished to draw a new card.
+    # def testSuzyLafayetteDuelloLoss(self):
+    #     setDefaults(numPlayers=2)
+    #     setPlayerCharacter('B', SUZY_LAFAYETTE)
+    #     setPlayerCardsInHand({'A': [1, 55], 'B': [2]})
+    #     expectedCardDrawn = game.drawPile[-1]
+    #     expectedInfo = "You drew a card using Suzy Lafayette's ability!"
+    #     expectedUpdate = "B drew a card using Suzy Lafayette's ability."
+
+    #     game.validateCardChoice('A', 55)
+    #     self.assertEqual(players['A'].cardsInHand, [game.getCardByUid(1)])
+
+    #     game.processQuestionResponse('B', QUESTION_DUELLO_REACTION.format('A'), PLAY_A_BANG)
+
+    #     tuples = game.processQuestionResponse('A', QUESTION_DUELLO_BANG_REACTION.format('B'), LOSE_A_LIFE)
+    #     self.assertEqual(getEmitTypes(tuples), {SHOW_INFO_MODAL, UPDATE_CARD_HAND, UPDATE_ACTION, UPDATE_PLAYER_LIST})
+    #     self.assertTrue(any([expectedInfo in unescape(t[1]['html']) for t in tuples if t[0] == SHOW_INFO_MODAL and t[2] == players['B']]))
+    #     self.assertTrue(expectedUpdate in [t[1]['update'] for t in tuples if t[0] == UPDATE_ACTION])
+
+    #     self.assertEqual(players['B'].cardsInHand, [expectedCardDrawn])
+    #     self.assertTrue(expectedCardDrawn not in game.drawPile)
+    #     self.assertEqual(game.currentCard, None)
+
+    # # Suzy Lafayette: Draw a card after having the last one stolen by a Cat Balou / Panico.
+    # def testSuzyLafayetteCatBalouPanico(self):
+    #     expectedInfo = "You drew a card using Suzy Lafayette's ability!"
+    #     expectedUpdate = "B drew a card using Suzy Lafayette's ability."
+
+    #     for uid in [38, 50]:
+    #         setDefaults(numPlayers=2)
+    #         setPlayerCharacter('B', SUZY_LAFAYETTE)
+    #         setPlayerCardsInHand({'A': [uid], 'B': [1]})
+    #         expectedCardDrawn = game.drawPile[-1]
+
+    #         tuples = game.validateCardChoice('A', uid)
+    #         self.assertEqual(getEmitTypes(tuples), {SHOW_INFO_MODAL, UPDATE_CARD_HAND, UPDATE_ACTION, UPDATE_DISCARD_PILE})
+    #         self.assertTrue(any([expectedInfo in unescape(t[1]['html']) for t in tuples if t[0] == SHOW_INFO_MODAL and t[2] == players['B']]))
+    #         self.assertTrue(expectedUpdate in [t[1]['update'] for t in tuples if t[0] == UPDATE_ACTION])
+
+    #         self.assertEqual(players['B'].cardsInHand, [expectedCardDrawn])
+    #         self.assertTrue(expectedCardDrawn not in game.drawPile)
+    #         self.assertEqual(game.currentCard, None)
+
+    # # Suzy Lafayette: Draw a card after playing a Birra to stay alive.
+    # def testSuzyLafayetteStayingAlive(self):
+    #     setDefaults(numPlayers=2)
+    #     setPlayerCharacter('B', SUZY_LAFAYETTE)
+    #     setPlayerCardsInHand({'A': [1], 'B': [42]})
+    #     setPlayerLives({'B': 1})
+    #     expectedCardDrawn = game.drawPile[-1]
+    #     expectedInfo = "You drew a card using Suzy Lafayette's ability!"
+    #     expectedUpdate = "B drew a card using Suzy Lafayette's ability."
+
+    #     tuples = game.validateCardChoice('A', 1)
+    #     self.assertEqual(getEmitTypes(tuples), {SHOW_INFO_MODAL, UPDATE_CARD_HAND, UPDATE_ACTION, UPDATE_DISCARD_PILE, UPDATE_PLAYER_LIST})
+    #     self.assertTrue(any([expectedInfo in unescape(t[1]['html']) for t in tuples if t[0] == SHOW_INFO_MODAL and t[2] == players['B']]))
+    #     self.assertTrue(expectedUpdate in [t[1]['update'] for t in tuples if t[0] == UPDATE_ACTION])
+
+    #     self.assertEqual(players['B'].lives, 1)
+
+    #     self.assertEqual(players['B'].cardsInHand, [expectedCardDrawn])
+    #     self.assertTrue(expectedCardDrawn not in game.drawPile)
+    #     self.assertEqual(game.currentCard, None)
+
+    # # Suzy Lafayette: Draw a card after having the last one stolen by El Gringo.
+    # def testSuzyLafayetteElGringo(self):
+    #     setDefaults(numPlayers=2)
+    #     setPlayerCharacter('A', SUZY_LAFAYETTE)
+    #     setPlayerCharacter('B', EL_GRINGO)
+    #     setPlayerCardsInHand({'A': [1, 2], 'B': [26]})
+    #     expectedCardDrawn = game.drawPile[-1]
+    #     expectedInfo = "You drew a card using Suzy Lafayette's ability!"
+    #     expectedUpdate = "A drew a card using Suzy Lafayette's ability."
+
+    #     game.validateCardChoice('A', 1)
+    #     self.assertEqual(players['A'].cardsInHand, [game.getCardByUid(2)])
+
+    #     tuples = game.processQuestionResponse('B', QUESTION_BANG_REACTION.format('A'), LOSE_A_LIFE)
+    #     self.assertEqual(getEmitTypes(tuples), {SHOW_INFO_MODAL, UPDATE_CARD_HAND, UPDATE_ACTION, UPDATE_PLAYER_LIST})
+    #     self.assertTrue(any([expectedInfo in unescape(t[1]['html']) for t in tuples if t[0] == SHOW_INFO_MODAL and t[2] == players['A']]))
+    #     self.assertTrue(expectedUpdate in [t[1]['update'] for t in tuples if t[0] == UPDATE_ACTION])
+
+    #     self.assertEqual(players['A'].cardsInHand, [expectedCardDrawn])
+    #     self.assertTrue(expectedCardDrawn not in game.drawPile)
+    #     self.assertEqual(game.currentCard, None)
+
+    # # Suzy Lafayette: Draw a card after having the last one stolen by Jesse Jones.
+    # def testSuzyLafayetteJesseJones(self):
+    #     setDefaults()
+    #     setPlayerCharacter('B', JESSE_JONES)
+    #     setPlayerCharacter('C', SUZY_LAFAYETTE)
+    #     setPlayerCardsInHand({'C': [1]})
+    #     expectedCardDrawn = game.drawPile[-2]
+    #     expectedInfo = "You drew a card using Suzy Lafayette's ability!"
+    #     expectedUpdate = "C drew a card using Suzy Lafayette's ability."
+
+    #     game.startNextTurn('A')
+
+    #     tuples = game.processQuestionResponse('B', QUESTION_JESSE_JONES, FROM_ANOTHER_PLAYER)
+    #     self.assertEqual(getEmitTypes(tuples), {SHOW_INFO_MODAL, UPDATE_CARD_HAND, UPDATE_ACTION})
+    #     self.assertTrue(any([expectedInfo in unescape(t[1]['html']) for t in tuples if t[0] == SHOW_INFO_MODAL and t[2] == players['C']]))
+    #     self.assertTrue(expectedUpdate in [t[1]['update'] for t in tuples if t[0] == UPDATE_ACTION])
+
+    #     self.assertEqual(players['C'].cardsInHand, [expectedCardDrawn])
+    #     self.assertTrue(expectedCardDrawn not in game.drawPile)
+    #     self.assertEqual(game.currentCard, None)
+
+    # # Vulture Sam: Take all the cards from a player's hand and from in front of him/her when s/he gets eliminated.
+    # def testVultureSam(self):
+    #     setDefaults()
+    #     setPlayerCharacter('C', VULTURE_SAM)
+    #     cardsInHand = [1, 50, 60]
+    #     cardsInPlay = [66, 75]
+    #     jailCard = [69]
+    #     setPlayerCardsInHand({'A': [54], 'B': cardsInHand})
+    #     setPlayerCardsInPlay({'B': cardsInPlay})
+    #     setPlayerSpecialCards({'B': jailCard})
+    #     setPlayerLives({'B': 1})
+    #     expectedInfo = "You got all of B's cards because they were eliminated"
+    #     expectedUpdate = "C got all of B's cards using Vulture Sam's ability."
+
+    #     tuples = game.validateCardChoice('A', 54)
+    #     self.assertEqual(getEmitTypes(tuples), {SHOW_INFO_MODAL, UPDATE_CARD_HAND, UPDATE_ACTION, UPDATE_PLAYER_LIST, UPDATE_DISCARD_PILE})
+    #     self.assertTrue(any([expectedInfo in unescape(t[1]['html']) for t in tuples if t[0] == SHOW_INFO_MODAL and t[2] == players['C']]))
+    #     self.assertTrue(expectedUpdate in [t[1]['update'] for t in tuples if t[0] == UPDATE_ACTION])
+
+    #     self.assertEqual(players['B'].lives, 0)
+
+    #     self.assertEqual(players['B'].cardsInHand + players['B'].cardsInPlay + players['B'].specialCards, [])
+    #     self.assertEqual(players['C'].cardsInHand, [game.getCardByUid(uid) for uid in cardsInHand + cardsInPlay + jailCard])
+    #     self.assertEqual(game.currentCard, None)
+
+    # # Willy the Kid: Successfully play one, two, and three Bangs in one turn.
+    # def testWillyTheKid(self):
+    #     for bangAmount in range(1, 4):
+    #         setDefaults(numPlayers=2)
+    #         setPlayerCharacter('A', WILLY_THE_KID)
+    #         bangUids = [b for b in range(1, 1 + bangAmount)]
+    #         setPlayerCardsInHand({'A': bangUids})
+
+    #         for bangUid in bangUids:
+    #             self.assertNotEqual(game.validateCardChoice('A', bangUid), [])
+    #             self.assertTrue(bangUid not in [c.uid for c in players['A'].cardsInHand])
+    #             self.assertEqual(players['B'].lives, players['B'].lifeLimit - bangUid)
+    #             self.assertEqual(game.currentCard, None)
+
+    #         self.assertEqual(players['A'].cardsInHand, [])
+
 
 
 

@@ -40,21 +40,24 @@ class PlayerGame(dict):
 	# 	return (other is None) or self.username != other.username
 
 	def addCardToHand(self, card):
-		utils.logPlayer("addCardToHand(): {} adding {} ({}) to hand.".format(self.username, card.getDeterminerString(), card.uid))
+		utils.logPlayer("{} adding {} ({}) to hand.".format(self.username, card.getDeterminerString(), card.uid))
 		self.cardsInHand.append(card)
 
 	def addCardToInPlay(self, card):
-		utils.logPlayer("addCardToInPlay(): {} putting {} ({}) in play.".format(self.username, card.getDeterminerString(), card.uid))
+		utils.logPlayer("{} putting {} ({}) in play.".format(self.username, card.getDeterminerString(), card.uid))
 		self.cardsInPlay.append(card)
 
 	def getRidOfCard(self, card):
+		utils.logPlayer("{} attempting to discard card {}. cards in hand: {}  cards in play: {}  special cards: {}.".format(self.username, card.uid, self.cardsInHand, self.cardsInPlay, self.specialCards))
+
 		for cardList in [self.cardsInHand, self.cardsInPlay, self.specialCards]:
 			if card in cardList:
-				utils.logPlayer("getRidOfCard(): {} discarding card {}.".format(self.username, card.uid))
 				cardList.remove(card)
+				utils.logPlayer("Successfully discarded card {}. new cards in hand: {}  new cards in play: {}  new special cards: {}".format(card.uid, self.cardsInHand, self.cardsInPlay, self.specialCards))
+
 				return
 
-		utils.logError("getRidOfCard(): Failed to discard card {} for {}.".format(card.uid, self.username))
+		utils.logError("Failed to discard card {} for {}.".format(card.uid, self.username))
 
 	def getCardTypeFromHand(self, cardName):
 		cards = [c for c in self.cardsInHand if c.name == cardName]
@@ -69,17 +72,17 @@ class PlayerGame(dict):
 
 	def countBariles(self):
 		amount = self.getBlueCardAmounts(BARILE, JOURDONNAIS)
-		utils.logPlayer("countBariles(): {} has a barile amount of {}.".format(self.username, amount))
+		utils.logPlayer("{} has a barile amount of {}.".format(self.username, amount))
 		return amount
 
 	def getMustangDistance(self): # Others view you at distance +1.
 		amount = self.getBlueCardAmounts(MUSTANG, PAUL_REGRET)
-		utils.logPlayer("getMustangDistance(): {} has a mustang amount of {}.".format(self.username, amount))
+		utils.logPlayer("{} has a mustang amount of {}.".format(self.username, amount))
 		return amount
 
 	def getScopeDistance(self): # You view others at distance -1.
 		amount = self.getBlueCardAmounts(SCOPE, ROSE_DOOLAN)
-		utils.logPlayer("getScopeDistance(): {} has a scope amount of {}.".format(self.username, amount))
+		utils.logPlayer("{} has a scope amount of {}.".format(self.username, amount))
 		return amount
 
 	def hasBangLimit(self):
@@ -93,25 +96,27 @@ class PlayerGame(dict):
 		gun = utils.getObjectFromList(lambda card: card.cardtype == GUN_CARD, self.cardsInPlay)
 		
 		if gun == None:
-			utils.logPlayer("getGunRange(): {} has no gun, so range is 1.".format(self.username))
+			utils.logPlayer("{} has no gun, so range is 1.".format(self.username))
 			return 1 # The default range is 1 for the Colt .45.
 		else:
-			utils.logPlayer("getGunRange(): {} has {} in play, so range is {}.".format(self.username, gun.getDeterminerString(), gun.range))
+			utils.logPlayer("{} has {} in play, so range is {}.".format(self.username, gun.getDeterminerString(), gun.range))
 			return gun.range
 
 	def gainOneLife(self):
-		utils.logPlayer("gainOneLife(): {} going from {} to {} lives.".format(self.username, self.lives, min(self.lives + 1, self.lifeLimit)))
+		utils.logPlayer("{} going from {} to {} lives.".format(self.username, self.lives, min(self.lives + 1, self.lifeLimit)))
 		self.lives = min(self.lives + 1, self.lifeLimit)
 
 	def loseOneLife(self):
-		utils.logPlayer("loseOneLife(): {} going from {} to {} lives.".format(self.username, self.lives, self.lives - 1))
+		utils.logPlayer("{} going from {} to {} lives.".format(self.username, self.lives, self.lives - 1))
 		self.lives -= 1
 
 	def getCardsOnTable(self):
 		return self.cardsInPlay + self.specialCards
 
 	def countExcessCards(self):
-		return max(len(self.cardsInHand) - self.lives, 0)
+		excess = max(len(self.cardsInHand) - self.lives, 0)
+		utils.logPlayer("Counting excess cards for {} (cards: {}) (lives: {}): {}".format(self.getLogString(), self.cardsInHand, self.lives, excess))
+		return excess
 
 	def panico(self, card=None): # The card parameter would only be used if a specific card from in-play is being taken.
 		if card == None:
@@ -121,12 +126,12 @@ class PlayerGame(dict):
 
 			card = random.choice(self.cardsInHand)
 			self.getRidOfCard(card)
-			utils.logPlayer("{} ({}) randomly losing {} (UID: {}) from hand.".format(self.character.name, self.username, card.getDeterminerString(), card.uid))
+			utils.logPlayer("{} randomly losing {} (UID: {}) from hand.".format(self.getLogString(), card.getDeterminerString(), card.uid))
 			return card
 		
 		else:
 			self.getRidOfCard(card)
-			utils.logPlayer("{} ({}) lost on-the-table {} (UID: {}) because of a Panico/Cat Balou.".format(self.character.name, self.username, card.getDeterminerString(), card.uid))
+			utils.logPlayer("{} lost on-the-table {} (UID: {}) because of a Panico/Cat Balou.".format(self.getLogString(), card.getDeterminerString(), card.uid))
 			return card
 
 	def getLogString(self):

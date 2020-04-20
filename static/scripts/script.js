@@ -1,6 +1,13 @@
 var socket;
 var username;
+
 var OK_MSG = "OK";
+var INFO_MODAL = "#info_modal";
+var QUESTION_MODAL = "#question_modal"
+var TOP_HALF = "#topHalfDiv"
+var BOTTOM_HALF = "#bottomHalfDiv"
+var CARD_CAROUSEL = "#cardsInHandCarousel"
+var WAITING_FOR_SPAN = "#waitingForSpan"
 
 var cardsAreBlurred = false;
 var keysPressed = {};
@@ -17,7 +24,7 @@ $(document).ready(function(){
 		/* Socket functions for showing the modals. */
 
 		socket.on('show_info_modal', function(data) {
-			if (isNullOrUndefined($("#info_modal").html())) { // Undefined if the message was received before the page was rendered.
+			if (isNullOrUndefined($(INFO_MODAL).html())) { // Undefined if the message was received before the page was rendered.
 				var html = data.html;
 				socket.emit("info_modal_undefined", username, html);
 			}
@@ -27,7 +34,12 @@ $(document).ready(function(){
 		});
 
 		socket.on('show_question_modal', function(data) {
-			if (isNullOrUndefined($("#question_modal").html())) { // Undefined if the message was received before the page was rendered.
+			// Close the waiting modal if it's currently open, as it will block the question modal.
+			if (waitingModalIsOpen()) {
+				closeWaitingModal();
+			}
+
+			if (isNullOrUndefined($(QUESTION_MODAL).html())) { // Undefined if the message was received before the page was rendered.
 				var option1 = data.option1;
 				var option2 = data.option2;
 				var option3 = data.option3;
@@ -41,10 +53,10 @@ $(document).ready(function(){
 			else
 			{
 				// Close the waiting modal if it's open.
-				if ($('#info_modal').is(':visible')) {
+				if ($(INFO_MODAL).is(':visible')) {
 					if ($('#infoModalText').text().indexOf('Waiting') > -1) {
-						$("#info_modal").modal('hide');
-						$("#info_modal").html('');
+						$(INFO_MODAL).modal('hide');
+						$(INFO_MODAL).html('');
 					}
 				}
 
@@ -66,9 +78,9 @@ $(document).ready(function(){
 				if (!isNullOrUndefined(option5)) { d[option5] = function() { socket.emit("question_modal_answered", username, question, option5); $( this ).dialog( "close" ); }; }
 				if (!isNullOrUndefined(option6)) { d[option6] = function() { socket.emit("question_modal_answered", username, question, option6); $( this ).dialog( "close" ); }; }
 
-				$("#question_modal").css("display", "block");
-				$("#question_modal").html(data.html)
-				$("#question_modal").dialog({
+				$(QUESTION_MODAL).css("display", "block");
+				$(QUESTION_MODAL).html(data.html)
+				$(QUESTION_MODAL).dialog({
 					dialogClass: "no-close",
 					resizable: false,
 					height: "auto",
@@ -81,8 +93,7 @@ $(document).ready(function(){
 
 		socket.on('show_waiting_modal', function(data) {
 			showInfoModal(data.html);
-			$("#topHalfDiv").addClass("blur");
-			$("#bottomHalfDiv").addClass("blur");
+			addBlurToFullScreen();
 		});
 
 		/* Socket functions for waiting in the lobby. */
@@ -132,20 +143,20 @@ $(document).ready(function(){
 				var others_left = data.players_remaining.length - 1;
 				if (others_left >= 0) {
 					if (others_left == 0) {
-						$("#waitingForSpan").html("We're just waiting for you to pick a character now...");
+						$(WAITING_FOR_SPAN).html("We're just waiting for you to pick a character now...");
 					}
 					else if (others_left == 1) {
-						$("#waitingForSpan").html("Waiting for you and 1 other player to pick a character...");
+						$(WAITING_FOR_SPAN).html("Waiting for you and 1 other player to pick a character...");
 					}
 					else {
-						$("#waitingForSpan").html("Waiting for you and " + others_left.toString() + " other players to pick a character...");
+						$(WAITING_FOR_SPAN).html("Waiting for you and " + others_left.toString() + " other players to pick a character...");
 					}
 				}
 			}
 			else {
 				var others_left = data.players_remaining.length;
-				if (others_left == 1) { $("#waitingForSpan").html("We're still waiting for 1 more player..."); }
-				else { $("#waitingForSpan").html("We're still waiting for " + others_left.toString() + " players..."); }
+				if (others_left == 1) { $(WAITING_FOR_SPAN).html("We're still waiting for 1 more player..."); }
+				else { $(WAITING_FOR_SPAN).html("We're still waiting for " + others_left.toString() + " players..."); }
 			}
 		});
 
@@ -182,22 +193,13 @@ $(document).ready(function(){
 			socket.emit('ending_turn', username);
 		});
 
-		socket.on('update_player_image', function(data) {
-			$("#" + data.username + "PlayerImage").attr("src", data.path);
-		});
-
 		socket.on('update_player_list', function(data) {
-			$("#bottomHalfDiv").html("");
-			$("#bottomHalfDiv").html(data.html);
+			$(BOTTOM_HALF).html("");
+			$(BOTTOM_HALF).html(data.html);
 		});
 
 		socket.on('discard_click', function(data) {
 			addDiscardClickFunctions();
-		})
-
-		socket.on('finish_discarding_cards', function(data) {
-	    	addDiscardClickFunctions(false);
-	    	socket.emit('ending_turn', username);
 		})
 	}
 });
@@ -249,11 +251,13 @@ function loadPlayPage(html) {
 
 function showInfoModal(html) {
 	// If an info message arrives once the waiting modal is already open, the blurs on the play screen need to be removed here.
-	$("topHalfDiv").removeClass("blur");
-	$("bottomHalfDiv").removeClass("blur");
+	removeBlurFromFullScreen();
 
-	// If the modal is already open, just add the new text to it.
-	if ($('#info_modal').is(':visible')) {
+	// If the modal is already open and standard, and the new modal is standard, just combine the text of the two.
+	var eitherModalIncludesImg = ($(INFO_MODAL).html().includes("<img")) || (html.includes("<img"));
+	var eitherModalIsWaiting = waitingModalIsOpen() || (html.includes("Waiting"));
+
+	if ($(INFO_MODAL).is(':visible') && !eitherModalIncludesImg && !eitherModalIsWaiting) {
 		var newModalElements = $(html);
 		var element = $('#infoModalText', newModalElements);
 		$("#infoModalText").prepend(element[0].innerText + '<br/><br/>');
@@ -261,10 +265,9 @@ function showInfoModal(html) {
 
 	// Otherwise, load the new HTML into the modal and display it.
 	else {
-		$("#info_modal").modal('hide');
-		$("#info_modal").html('');
-		$("#info_modal").html(html);
-		$("#info_modal").modal('show');
+		closeInfoModal();
+		$(INFO_MODAL).html(html);
+		$(INFO_MODAL).modal('show');
 	}
 }
 
@@ -282,7 +285,7 @@ function discardCard(uid) {
 }
 
 function addBlurToCards(cardNames) {
-	$("#cardsInHandCarousel").find("img").each(function() {
+	$(CARD_CAROUSEL).find("img").each(function() {
 		var cardName = $(this).attr("alt").split(' ')[0];
 		var uid = $(this).attr("alt").split(' ')[1];
 		
@@ -298,7 +301,7 @@ function addBlurToCards(cardNames) {
 }
 
 function removeBlurFromCards() {
-	$("#cardsInHandCarousel").find("img").each(function() {
+	$(CARD_CAROUSEL).find("img").each(function() {
 		$(this).removeClass("blur");
 		$(this).removeAttr("onClick"); // If the player is the current player, the click function will be reset by the new card carousel.
 	});
@@ -306,12 +309,22 @@ function removeBlurFromCards() {
 	cardsAreBlurred = false;
 }
 
+function addBlurToFullScreen() {
+	$(TOP_HALF).addClass("blur");
+	$(BOTTOM_HALF).addClass("blur");
+}
+ 
+function removeBlurFromFullScreen() {
+	$(TOP_HALF).removeClass("blur");
+	$(BOTTOM_HALF).removeClass("blur");
+}
+
 function pickEmporioCard(uid) {
 	socket.emit('emporio_card_picked', username, uid);
 }
 
 function setupCarousel() {
-	$('#cardsInHandCarousel').carousel({
+	$(CARD_CAROUSEL).carousel({
 	  interval: false
 	});
 
@@ -334,7 +347,7 @@ function setupCarousel() {
 }
 
 function addDiscardClickFunctions(add=true) {
-	$("#cardsInHandCarousel").find("img").each(function() {
+	$(CARD_CAROUSEL).find("img").each(function() {
 		var cardName = $(this).attr("alt").split(' ')[0];
 		var uid = $(this).attr("alt").split(' ')[1];
 
@@ -345,6 +358,20 @@ function addDiscardClickFunctions(add=true) {
 			$(this).removeAttr("onClick");
 		}
 	});
+}
+
+function waitingModalIsOpen() {
+	return $(INFO_MODAL).html().includes("Waiting");
+}
+
+function closeInfoModal() {
+	$(INFO_MODAL).modal('hide');
+	$(INFO_MODAL).html('');
+}
+
+function closeWaitingModal() {
+	removeBlurFromFullScreen();
+	closeInfoModal();
 }
 
 /* Key press functions to enable players to send messages to the server using keyboard strokes. */
@@ -359,8 +386,6 @@ $(document).keydown(function (e) {
     else if (16 in keysPressed && 83 in keysPressed) { // Shift-S, to trigger a special ability when applicable.
     	socket.emit('use_special_ability', username);
     }
-
-    delete keysPressed[e.which];
 });
 
 $(document).keyup(function (e) {

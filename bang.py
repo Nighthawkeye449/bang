@@ -100,6 +100,9 @@ def emitTuples(tuples):
 		else:
 			emit(modalEmitString, args, recipient)
 
+
+JSON_GAME_PATH = utils.getLocalFilePath("game.json")
+
 # Server setup
 app = Flask(__name__, static_url_path='')
 app.secret_key = 'secretkey1568486123168'
@@ -113,19 +116,15 @@ SOCKET_MESSAGE_TIMESTAMPS = dict()
 
 #################### Socket IO functions ####################
 
-@socketio.on('connected')
+@socketio.on(CONNECTED)
 def connectUsernameToSid(username):
-	utils.logServer("Received socket message 'connected' from {}.".format(username))
+	utils.logServer("Received socket message '{}' from {}.".format(CONNECTED, username))
 	with lock:
 		game['gp'].players[username].sid = request.sid
 
-@socketio.on('disconnect')
-def disconnect():
-	utils.logServer('Client {} disconnected.'.format(request.sid))
-
-@socketio.on('start_button_clicked')
+@socketio.on(START_BUTTON_CLICKED)
 def startGame():
-	utils.logServer("Received socket message 'start_button_clicked'. Preparing game for setup.")
+	utils.logServer("Received socket message '{}'. Preparing game for setup.".format(START_BUTTON_CLICKED))
 	with lock:
 		if not game['gp'].preparedForSetup:
 			game['gp'].prepareForSetup()
@@ -135,11 +134,11 @@ def startGame():
 	#     if count > 1:
 	#         time.sleep(2)
 
-	emit('start_game')
+	emit(START_GAME)
 
-@socketio.on('set_character')
+@socketio.on(SET_CHARACTER)
 def setCharacter(username, character):
-	utils.logServer("Received socket message 'set_character' from {}: {}.".format(username, character))
+	utils.logServer("Received socket message '{}' from {}: {}.".format(SET_CHARACTER, username, character))
 	with lock:
 		game['gp'].assignCharacter(username, character)
 		unassigned_players_remaining = [u for u in game['gp'].players if game['gp'].players[u].character == None]
@@ -152,10 +151,10 @@ def setCharacter(username, character):
 			emitTuples(game['gp'].finalizeSetup())
 				
 
-@socketio.on('card_was_discarded')
+@socketio.on(CARD_WAS_DISCARDED)
 def cardWasDiscarded(username, uid):
 	if validResponseTime(username):
-		utils.logServer("Received socket message 'card_was_discarded' from {}: {}.".format(username, uid))
+		utils.logServer("Received socket message '{}' from {}: {}.".format(CARD_WAS_DISCARDED, username, uid))
 		with lock:
 			card = game['gp'].getCardByUid(uid)
 
@@ -163,10 +162,10 @@ def cardWasDiscarded(username, uid):
 			player = game['gp'].players[username]
 			game['gp'].discardCard(player, card)
 
-@socketio.on('validate_card_choice')
+@socketio.on(VALIDATE_CARD_CHOICE)
 def cardWasPlayed(username, uid):
 	if validResponseTime(username):
-		utils.logServer("Received socket message 'validate_card_choice' from {}: {}.".format(username, uid))
+		utils.logServer("Received socket message '{}' from {}: {}.".format(VALIDATE_CARD_CHOICE, username, uid))
 		with lock:
 			card = game['gp'].getCardByUid(int(uid))
 
@@ -178,50 +177,53 @@ def cardWasPlayed(username, uid):
 				utils.logServer("Received socket message from {} to play {} (UID: {}).".format(username, card.name, uid))
 				emitTuples(game['gp'].validateCardChoice(username, uid))
 
-@socketio.on('info_modal_undefined')
+@socketio.on(INFO_MODAL_UNDEFINED)
 def waitForInfoModal(username, html):
 	utils.logServer("Info modal load failed for {}. Waiting 1/10 of a second and trying again.".format(username))
 	time.sleep(0.1)
-	emit('show_info_modal', {'html': html}, recipient=game['gp'].players[username])
+	emit(SHOW_INFO_MODAL, {'html': html}, recipient=game['gp'].players[username])
 
-@socketio.on('question_modal_undefined')
+@socketio.on(QUESTION_MODAL_UNDEFINED)
 def waitForQuestionModal(username, option1, option2, option3, option4, option5, option6, html, question):
 	utils.logServer("Question modal load failed for {}. Waiting 1/10 of a second and trying again.".format(username))
 	time.sleep(0.1)
-	emit('show_question_modal', {'option1': option1, 'option2': option2, 'option3': option3, 'option4': option4, 'option5': option5, 'option6': option6, 'html': html, 'question': question}, recipient=game['gp'].players[username])
+	emit(SHOW_QUESTION_MODAL, {'option1': option1, 'option2': option2, 'option3': option3, 'option4': option4, 'option5': option5, 'option6': option6, 'html': html, 'question': question}, recipient=game['gp'].players[username])
 
-@socketio.on('question_modal_answered')
+@socketio.on(QUESTION_MODAL_ANSWERED)
 def questionModalAnswered(username, question, answer):
 	if validResponseTime(username):
-		utils.logServer("Received socket message 'question_modal_answered' from {}: {} -> {}.".format(username, question, answer))
-		# with lock:
+		utils.logServer("Received socket message '{}' from {}: {} -> {}.".format(QUESTION_MODAL_ANSWERED, username, question, answer))
 		emitTuples(game['gp'].processQuestionResponse(username, question, answer))
 
-@socketio.on('blur_card_played')
+@socketio.on(BLUR_CARD_PLAYED)
 def playBlurCard(username, uid):
 	if validResponseTime(username):
-		utils.logServer("Received socket message 'blue_card_played' from {}: {}.".format(username, uid))
-		# with lock:
+		utils.logServer("Received socket message '{}' from {}: {}.".format(BLUR_CARD_PLAYED, username, uid))
 		emitTuples(game['gp'].processBlurCardSelection(username, int(uid)))
 
-@socketio.on('emporio_card_picked')
+@socketio.on(EMPORIO_CARD_PICKED)
 def pickEmporioCard(username, uid):
 	if validResponseTime(username):
-		utils.logServer("Received socket message 'emporio_card_picked' from {}: {}.".format(username, uid))
-		# with lock:
+		utils.logServer("Received socket message '{}' from {}: {}.".format(EMPORIO_CARD_PICKED, username, uid))
 		emitTuples(game['gp'].processEmporioCardSelection(username, int(uid)))
 
-@socketio.on('ending_turn')
+@socketio.on(ENDING_TURN)
 def endingTurn(username):
 	if validResponseTime(username):
-		utils.logServer("Received socket message 'ending_turn' from {}.".format(username))
+		utils.logServer("Received socket message '{}' from {}.".format(ENDING_TURN, username))
 		emitTuples(game['gp'].startNextTurn(username))
 
-@socketio.on('discarding_card')
+@socketio.on(DISCARDING_CARD)
 def discardingCard(username, uid):
 	if validResponseTime(username):
-		utils.logServer("Received socket message 'discarding_card' from {}.".format(username))
+		utils.logServer("Received socket message '{}' from {}.".format(DISCARDING_CARD, username))
 		emitTuples(game['gp'].playerDiscardingCard(username, int(uid)))
+
+@socketio.on(USE_SPECIAL_ABILITY)
+def specialAbility(username):
+	if validResponseTime(username):
+		utils.logServer("Received socket message '{}' from {}.".format(USE_SPECIAL_ABILITY, username))
+		emitTuples(game['gp'].useSpecialAbility(username))
 
 #################### App routes ####################
 
