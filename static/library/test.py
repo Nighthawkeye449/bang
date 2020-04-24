@@ -19,44 +19,45 @@ CARD_PLAYED_TUPLES = {UPDATE_CARD_HAND, UPDATE_DISCARD_PILE, UPDATE_ACTION}
 WAITING_FOR_RESPONSE_TUPLES = {SHOW_QUESTION_MODAL, SHOW_WAITING_MODAL}
 BLUR_CARD_TUPLES = {SHOW_INFO_MODAL, BLUR_CARD_SELECTION}
 PLAYER_TOOK_DAMAGE_TUPLES = {SHOW_INFO_MODAL, UPDATE_PLAYER_LIST, UPDATE_ACTION}
+NEW_TURN_TUPLES = {SHOW_INFO_MODAL, UPDATE_ACTION, UPDATE_PLAYER_LIST, UPDATE_DISCARD_PILE, UPDATE_CARD_HAND, UPDATE_CARDS_IN_PLAY}
 
 def setDefaults(uid=None, numPlayers=7):
     global game
 
     players['A'].role = SHERIFF
     players['A'].character = loadCharacter(SID_KETCHUM)
-    players['A'].lives = players['A'].character.num_lives + 1
-    players['A'].lifeLimit = players['A'].character.num_lives + 1
+    players['A'].lives = players['A'].character.numLives + 1
+    players['A'].lifeLimit = players['A'].character.numLives + 1
 
-    players['B'].role = OUTLAW
+    players['B'].role = RENEGADE
     players['B'].character = loadCharacter(SID_KETCHUM)
-    players['B'].lives = players['B'].character.num_lives
-    players['B'].lifeLimit = players['B'].character.num_lives
+    players['B'].lives = players['B'].character.numLives
+    players['B'].lifeLimit = players['B'].character.numLives
 
     players['C'].role = OUTLAW
     players['C'].character = loadCharacter(SID_KETCHUM)
-    players['C'].lives = players['C'].character.num_lives
-    players['C'].lifeLimit = players['C'].character.num_lives
+    players['C'].lives = players['C'].character.numLives
+    players['C'].lifeLimit = players['C'].character.numLives
 
-    players['D'].role = RENEGADE
+    players['D'].role = OUTLAW
     players['D'].character = loadCharacter(SID_KETCHUM)
-    players['D'].lives = players['D'].character.num_lives
-    players['D'].lifeLimit = players['D'].character.num_lives
+    players['D'].lives = players['D'].character.numLives
+    players['D'].lifeLimit = players['D'].character.numLives
 
     players['E'].role = VICE
     players['E'].character = loadCharacter(SID_KETCHUM)
-    players['E'].lives = players['E'].character.num_lives
-    players['E'].lifeLimit = players['E'].character.num_lives
+    players['E'].lives = players['E'].character.numLives
+    players['E'].lifeLimit = players['E'].character.numLives
 
     players['F'].role = OUTLAW
     players['F'].character = loadCharacter(SID_KETCHUM)
-    players['F'].lives = players['F'].character.num_lives
-    players['F'].lifeLimit = players['F'].character.num_lives
+    players['F'].lives = players['F'].character.numLives
+    players['F'].lifeLimit = players['F'].character.numLives
 
     players['G'].role = VICE
     players['G'].character = loadCharacter(SID_KETCHUM)
-    players['G'].lives = players['G'].character.num_lives
-    players['G'].lifeLimit = players['G'].character.num_lives
+    players['G'].lives = players['G'].character.numLives
+    players['G'].lifeLimit = players['G'].character.numLives
 
     for p in players.values():
         p.cardsInHand = list()
@@ -90,7 +91,7 @@ def loadCharacter(name):
         characterDict = json.load(p)
         characterList.extend([Character(**characterDict[c]) for c in characterDict])
 
-    return utils.getObjectFromList(lambda c: c.name == name, characterList)
+    return utils.getUniqueItem(lambda c: c.name == name, characterList)
 
 '''
 UID mapping:
@@ -139,6 +140,12 @@ def setPlayerCharacter(username, character):
 def getCardsOfASuit(suit, n):
     return [c for c in game.allCards if c.suit == suit][:n]
 
+def getUsernameSet(players):
+    return {p.username for p in players}
+
+def getExplosionCard():
+    return [c for c in game.allCards if c.suit == SPADE and '2' <= c.value <= '9'][0]
+
 def getEmitTypes(tuples):
     return {t[0] for t in tuples if t[0] != SLEEP}
 
@@ -151,6 +158,18 @@ def countEmitTypes(tuples, countDict):
 
 def countEmitTypeToRecipient(tuples, emitType, recipient):
     return len([t for t in tuples if t[0] == emitType and t[2] == recipient])
+
+def playerGotInfo(username, info, tuples):
+    return any([info in unescape(t[1]['html']) for t in tuples if t[0] == SHOW_INFO_MODAL and t[2] == players[username]])
+
+def playerGotQuestion(username, question, tuples):
+    return any([question == t[1]['question'] for t in tuples if t[0] == SHOW_QUESTION_MODAL and t[2] == players[username]])
+
+def playersGotUpdate(update, tuples):
+    return update in [t[1]['update'] for t in tuples if t[0] == UPDATE_ACTION]
+
+def getQuestionTuple(username, tuples):
+    return [t for t in tuples if t[0] == SHOW_QUESTION_MODAL and t[2] == players[username]][0]
 
 class TestGameplay(TestCase):
 
@@ -312,10 +331,6 @@ class TestGameplay(TestCase):
         self.assertEqual(players['A'].cardsInHand, [game.getCardByUid(1)])
         self.assertEqual(game.discardPile, [])
         self.assertTrue(game.currentCard == None)
-
-    # Use a Bang where the first target selected isn't valid, so another selection is needed.
-    def testBang9(self):
-        self.assertTrue(False)
 
 
 
@@ -519,7 +534,7 @@ class TestGameplay(TestCase):
         self.assertEqual(countEmitTypeToRecipient(tuples, SHOW_INFO_MODAL, players['A']), 1)
         self.assertEqual(countEmitTypeToRecipient(tuples, SHOW_INFO_MODAL, players['B']), 2)
         self.assertTrue("You were defeated in the Duello" in [t[1]['html'] for t in tuples if t[0] == SHOW_INFO_MODAL and t[2] == players['A']][0])
-        self.assertTrue(any(["A took the hit" in t[1]['html'] for t in tuples if t[0] == SHOW_INFO_MODAL and t[2] == players['B']]))
+        self.assertTrue(playerGotInfo('B', "A took the hit", tuples))
 
         self.assertEqual(players['A'].lives, 4)
         self.assertEqual(players['B'].lives, 4)
@@ -540,14 +555,14 @@ class TestGameplay(TestCase):
         self.assertEqual(countEmitTypeToRecipient(tuples, SHOW_QUESTION_MODAL, players['A']), 1)
         self.assertEqual(countEmitTypeToRecipient(tuples, SHOW_INFO_MODAL, players['B']), 1)
         self.assertEqual(countEmitTypeToRecipient(tuples, SHOW_WAITING_MODAL, players['B']), 1)
-        self.assertEqual([t[1]['question'] for t in tuples if t[0] == SHOW_QUESTION_MODAL and t[2] == players['A']][0], QUESTION_DUELLO_BANG_REACTION.format('B'))
+        self.assertTrue(playerGotQuestion('A', QUESTION_DUELLO_BANG_REACTION.format('B'), tuples))
 
         tuples = game.processQuestionResponse('A', QUESTION_DUELLO_BANG_REACTION.format('B'), LOSE_A_LIFE)
         self.assertEqual(getEmitTypes(tuples), {SHOW_INFO_MODAL, UPDATE_ACTION, UPDATE_PLAYER_LIST})
         self.assertEqual(countEmitTypeToRecipient(tuples, SHOW_INFO_MODAL, players['A']), 1)
         self.assertEqual(countEmitTypeToRecipient(tuples, SHOW_INFO_MODAL, players['B']), 1)
         self.assertTrue("You were defeated in the Duello" in [t[1]['html'] for t in tuples if t[0] == SHOW_INFO_MODAL and t[2] == players['A']][0])
-        self.assertTrue(any(["A took the hit" in t[1]['html'] for t in tuples if t[0] == SHOW_INFO_MODAL and t[2] == players['B']]))
+        self.assertTrue(playerGotInfo('B', "A took the hit", tuples))
 
         self.assertEqual(players['A'].lives, 4)
         self.assertEqual(players['B'].lives, 4)
@@ -569,7 +584,7 @@ class TestGameplay(TestCase):
         self.assertEqual(getEmitTypes(tuples), PLAYER_TOOK_DAMAGE_TUPLES | CARD_PLAYED_TUPLES)
         self.assertEqual(countEmitTypeToRecipient(tuples, SHOW_INFO_MODAL, players['A']), 2)
         self.assertEqual(countEmitTypeToRecipient(tuples, SHOW_INFO_MODAL, players['B']), 1)
-        self.assertTrue(any(["B took the hit" in t[1]['html'] for t in tuples if t[0] == SHOW_INFO_MODAL and t[2] == players['A']]))
+        self.assertTrue(playerGotInfo('A', "B took the hit", tuples))
         self.assertTrue("You were defeated in the Duello" in [t[1]['html'] for t in tuples if t[0] == SHOW_INFO_MODAL and t[2] == players['B']][0])
 
         self.assertEqual(players['A'].lives, 5)
@@ -608,7 +623,7 @@ class TestGameplay(TestCase):
         self.assertEqual(getEmitTypes(tuples), PLAYER_TOOK_DAMAGE_TUPLES | CARD_PLAYED_TUPLES)
         self.assertEqual(countEmitTypeToRecipient(tuples, SHOW_INFO_MODAL, players['A']), 2)
         self.assertEqual(countEmitTypeToRecipient(tuples, SHOW_INFO_MODAL, players['B']), 1)
-        self.assertTrue(any(["B took the hit" in t[1]['html'] for t in tuples if t[0] == SHOW_INFO_MODAL and t[2] == players['A']]))
+        self.assertTrue(playerGotInfo('A', "B took the hit", tuples))
         self.assertTrue("You were defeated in the Duello" in [t[1]['html'] for t in tuples if t[0] == SHOW_INFO_MODAL and t[2] == players['B']][0])
 
         self.assertEqual(players['A'].lives, 5)
@@ -642,7 +657,7 @@ class TestGameplay(TestCase):
         self.assertEqual(countEmitTypeToRecipient(tuples, SHOW_INFO_MODAL, players['A']), 1)
         self.assertEqual(countEmitTypeToRecipient(tuples, SHOW_INFO_MODAL, players['B']), 2)
         self.assertTrue("You were defeated in the Duello" in [t[1]['html'] for t in tuples if t[0] == SHOW_INFO_MODAL and t[2] == players['A']][0])
-        self.assertTrue(any(["A took the hit" in t[1]['html'] for t in tuples if t[0] == SHOW_INFO_MODAL and t[2] == players['B']]))
+        self.assertTrue(playerGotInfo('B', "A took the hit", tuples))
 
         self.assertEqual(players['A'].lives, 4)
         self.assertEqual(players['B'].lives, 4)
@@ -724,7 +739,7 @@ class TestGameplay(TestCase):
 
         tuples = game.validateCardChoice('A', 42)
         self.assertEqual(getEmitTypes(tuples), {UPDATE_ACTION, UPDATE_DISCARD_PILE, UPDATE_CARD_HAND, UPDATE_PLAYER_LIST})
-        self.assertTrue("A played a Birra" in utils.getObjectFromList(lambda tup: tup[0] == UPDATE_ACTION, tuples)[1]['update'])
+        self.assertTrue("A played a Birra" in utils.getUniqueItem(lambda tup: tup[0] == UPDATE_ACTION, tuples)[1]['update'])
         
         self.assertEqual(players['A'].lives, 4)
         
@@ -823,7 +838,7 @@ class TestGameplay(TestCase):
 
     ''' Saloon tests. '''
 
-    # Everybody has the maximum number of lives.
+    # Everybody already has the maximum number of lives.
     def testSaloon1(self):
         setDefaults()
         setPlayerCardsInHand({'A': [60]})
@@ -907,7 +922,7 @@ class TestGameplay(TestCase):
 
 
 
-    # ''' Panico and Cat Balou tests. '''
+    ''' Panico and Cat Balou tests. '''
 
     # Successful Panico and Cat Balou against a 1-away player who has 1 card in hand.
     def testStealInHand1(self):
@@ -1019,7 +1034,36 @@ class TestGameplay(TestCase):
 
     # Succesful Panico and Cat Balou against a 1-away player who has 2 cards in play and is in jail, taking the jail card.
     def testStealInPlayAndSpecialCard(self):
-        self.assertTrue(False)
+        for cardUid in [38, 50]:
+            setDefaults()
+            setPlayerCardsInHand({'A': [cardUid]})
+            setPlayerCardsInPlay({'B': [66, 78]})
+            setPlayerSpecialCards({'B': [69]})
+            players['B'].jailStatus = 1
+
+            game.validateCardChoice('A', cardUid)
+            
+            game.processQuestionResponse('A', QUESTION_WHOSE_CARDS, 'B')
+
+            question = QUESTION_CARD_ON_TABLE.format('B', "Panico" if cardUid == 38 else "Cat Balou")
+            discardSet = set() if cardUid == 38 else {UPDATE_DISCARD_PILE}
+
+            tuples = game.processQuestionResponse('A', question, game.getCardByUid(69).getQuestionString())
+            self.assertEqual(getEmitTypes(tuples), {UPDATE_CARD_HAND, UPDATE_ACTION, SHOW_INFO_MODAL} | discardSet)
+            self.assertEqual(countEmitTypeToRecipient(tuples, SHOW_INFO_MODAL, players['A']), 1)
+            self.assertEqual(countEmitTypeToRecipient(tuples, UPDATE_CARD_HAND, players['A']), 1)
+            self.assertEqual(countEmitTypeToRecipient(tuples, SHOW_INFO_MODAL, players['B']), 1)
+            self.assertEqual(countEmitTypeToRecipient(tuples, UPDATE_CARD_HAND, players['B']), 1)
+
+            self.assertEqual(players['B'].jailStatus, 0)
+            self.assertEqual(players['B'].specialCards, [])
+            self.assertEqual(players['B'].cardsInPlay, [game.getCardByUid(66), game.getCardByUid(78)])
+            if cardUid == 38:
+                self.assertEqual(game.discardPile, [game.getCardByUid(cardUid)])
+            else:
+                self.assertEqual(game.discardPile, [game.getCardByUid(cardUid), game.getCardByUid(69)])
+
+            self.assertTrue(game.currentCard == None)
 
     # Successful Panico and Cat Balou against 1-away player who has both a card in hand and in play, taking the card in hand.
     def testStealInHandAndInPlay1(self):
@@ -1327,7 +1371,23 @@ class TestGameplay(TestCase):
 
     # Have a player unsuccessfully draw a Barile against a Bang and Gatling but still avoid it by using a Mancato.
     def testUnsuccessfulBarileWithMancato(self):
-        self.assertTrue(False)
+        for attackingUid in [1, 54]:
+            setDefaults(numPlayers=2)
+            setPlayerCardsInHand({'A': [attackingUid], 'B': [26]})
+            setPlayerCardsInPlay({'B': [64]})
+            nonHeartCard = getCardsOfASuit(SPADE, 1)[0]
+            game.drawPile.append(nonHeartCard)
+
+            game.validateCardChoice('A', attackingUid)
+
+            game.processQuestionResponse('B', QUESTION_BARILE_MANCATO.format('A', game.getCardByUid(attackingUid).getDisplayName()), PLAY_A_MANCATO)
+
+            self.assertEqual(players['A'].cardsInHand, [])
+            self.assertEqual(players['B'].cardsInHand, [])
+            self.assertEqual(players['B'].lives, 4)
+
+            self.assertEqual(game.discardPile, [game.getCardByUid(attackingUid), nonHeartCard, game.getCardByUid(26)])
+
 
 
 
@@ -1560,7 +1620,7 @@ class TestGameplay(TestCase):
         tuples = game.validateCardChoice('A', 54)
         self.assertEqual(countEmitTypeToRecipient(tuples, SHOW_INFO_MODAL, players['B']), 2)
         self.assertEqual(countEmitTypeToRecipient(tuples, UPDATE_CARD_HAND, players['B']), 1)
-        self.assertTrue(any(["You drew a card because you lost a life" in t[1]['html'] for t in tuples if t[0] == SHOW_INFO_MODAL and t[2] == players['B']]))
+        self.assertTrue(playerGotInfo('B', "You drew a card because you lost a life", tuples))
 
         self.assertEqual(players['B'].lives, 3)
         self.assertEqual(players['B'].cardsInHand, [cardToDraw])
@@ -1580,7 +1640,7 @@ class TestGameplay(TestCase):
             tuples = game.startNextTurn('A')
             self.assertEqual(countEmitTypeToRecipient(tuples, SHOW_INFO_MODAL, players['B']), 1)
             self.assertTrue(expectedInfo in [t[1]['html'] for t in tuples if t[0] == SHOW_INFO_MODAL and t[2] == players['B']][0])
-            self.assertTrue(expectedUpdate in [t[1]['update'] for t in tuples if t[0] == UPDATE_ACTION])
+            self.assertTrue(playersGotUpdate(expectedUpdate, tuples))
 
             self.assertEqual(players['B'].cardsInHand, expectedCardsDrawn)
             self.assertEqual(game.currentCard, None)
@@ -1599,7 +1659,7 @@ class TestGameplay(TestCase):
             tuples = game.startNextTurn('A')
             self.assertEqual(countEmitTypeToRecipient(tuples, SHOW_INFO_MODAL, players['B']), 1)
             self.assertTrue(expectedInfo in [t[1]['html'] for t in tuples if t[0] == SHOW_INFO_MODAL and t[2] == players['B']][0])
-            self.assertTrue(expectedUpdate in [t[1]['update'] for t in tuples if t[0] == UPDATE_ACTION])
+            self.assertTrue(playersGotUpdate(expectedUpdate, tuples))
 
             self.assertEqual(players['B'].cardsInHand, expectedCardsDrawn)
             self.assertEqual(game.currentCard, None)
@@ -1670,7 +1730,7 @@ class TestGameplay(TestCase):
         game.validateCardChoice('A', 55)
         
         tuples = game.processQuestionResponse('B', QUESTION_DUELLO_REACTION.format('A'), PLAY_A_BANG)
-        self.assertTrue(expectedUpdate in [t[1]['update'] for t in tuples if t[0] == UPDATE_ACTION])
+        self.assertTrue(playersGotUpdate(expectedUpdate, tuples))
 
         self.assertEqual(players['A'].lives, 4)
 
@@ -1729,9 +1789,9 @@ class TestGameplay(TestCase):
         tuples = game.validateCardChoice('A', 1)
         self.assertEqual(countEmitTypeToRecipient(tuples, UPDATE_CARD_HAND, players['A']), 2)
         self.assertEqual(countEmitTypeToRecipient(tuples, UPDATE_CARD_HAND, players['B']), 1)
-        self.assertTrue(any([expectedAttackerInfo in t[1]['html'] for t in tuples if t[0] == SHOW_INFO_MODAL and t[2] == players['A']]))
-        self.assertTrue(any([expectedElGringoInfo in unescape(t[1]['html']) for t in tuples if t[0] == SHOW_INFO_MODAL and t[2] == players['B']]))
-        self.assertTrue(expectedUpdate in [t[1]['update'] for t in tuples if t[0] == UPDATE_ACTION])
+        self.assertTrue(playerGotInfo('A', expectedAttackerInfo, tuples))
+        self.assertTrue(playerGotInfo('B', expectedElGringoInfo, tuples))
+        self.assertTrue(playersGotUpdate(expectedUpdate, tuples))
 
         self.assertEqual(players['B'].lives, 3)
 
@@ -1753,9 +1813,9 @@ class TestGameplay(TestCase):
             tuples = game.validateCardChoice('A', uid)
             self.assertEqual(countEmitTypeToRecipient(tuples, UPDATE_CARD_HAND, players['A']), 2)
             self.assertEqual(countEmitTypeToRecipient(tuples, UPDATE_CARD_HAND, players['B']), 1)
-            self.assertTrue(any([expectedAttackerInfo in t[1]['html'] for t in tuples if t[0] == SHOW_INFO_MODAL and t[2] == players['A']]))
-            self.assertTrue(any([expectedElGringoInfo in unescape(t[1]['html']) for t in tuples if t[0] == SHOW_INFO_MODAL and t[2] == players['B']]))
-            self.assertTrue(expectedUpdate in [t[1]['update'] for t in tuples if t[0] == UPDATE_ACTION])
+            self.assertTrue(playerGotInfo('A', expectedAttackerInfo, tuples))
+            self.assertTrue(playerGotInfo('B', expectedElGringoInfo, tuples))
+            self.assertTrue(playersGotUpdate(expectedUpdate, tuples))
 
             self.assertEqual(players['B'].lives, 3)
 
@@ -1775,9 +1835,9 @@ class TestGameplay(TestCase):
 
 
         tuples = game.validateCardChoice('A', 55)
-        self.assertTrue(any([expectedAttackerInfo in t[1]['html'] for t in tuples if t[0] == SHOW_INFO_MODAL and t[2] == players['A']]))
-        self.assertTrue(any([expectedElGringoInfo in unescape(t[1]['html']) for t in tuples if t[0] == SHOW_INFO_MODAL and t[2] == players['B']]))
-        self.assertTrue(expectedUpdate in [t[1]['update'] for t in tuples if t[0] == UPDATE_ACTION])
+        self.assertTrue(playerGotInfo('A', expectedAttackerInfo, tuples))
+        self.assertTrue(playerGotInfo('B', expectedElGringoInfo, tuples))
+        self.assertTrue(playersGotUpdate(expectedUpdate, tuples))
 
         self.assertEqual(players['B'].lives, 3)
 
@@ -1787,7 +1847,7 @@ class TestGameplay(TestCase):
         self.assertEqual(game.currentCard, None)
 
     # El Gringo: Don't steal from a player's hand after taking damage in his/her own Duello.
-    def testElGringoAgainstDuello(self):
+    def testElGringoAgainstDuelloException(self):
         setDefaults(numPlayers=2)
         setPlayerCharacter('A', EL_GRINGO)
         setPlayerCardsInHand({'A': [55], 'B': [1, 30]})
@@ -1813,7 +1873,7 @@ class TestGameplay(TestCase):
         tuples = game.validateCardChoice('A', 1)
         self.assertEqual(countEmitTypeToRecipient(tuples, UPDATE_CARD_HAND, players['A']), 1)
         self.assertEqual(countEmitTypeToRecipient(tuples, UPDATE_CARD_HAND, players['B']), 0)
-        self.assertTrue(any([expectedElGringoInfo in unescape(t[1]['html']) for t in tuples if t[0] == SHOW_INFO_MODAL and t[2] == players['B']]))
+        self.assertTrue(playerGotInfo('B', expectedElGringoInfo, tuples))
 
         self.assertEqual(players['B'].lives, 3)
 
@@ -1841,9 +1901,9 @@ class TestGameplay(TestCase):
         self.assertEqual({val for val in tuples[0][1].values() if val in players}, {'C', 'D'})
 
         tuples = game.processQuestionResponse('B', QUESTION_WHOSE_HAND, 'D')
-        self.assertTrue(any([expectedJesseJonesInfo in unescape(t[1]['html']) for t in tuples if t[0] == SHOW_INFO_MODAL and t[2] == players['B']]))
-        self.assertTrue(any([expectedOpponentInfo in unescape(t[1]['html']) for t in tuples if t[0] == SHOW_INFO_MODAL and t[2] == players['D']]))
-        self.assertTrue(expectedUpdate in [t[1]['update'] for t in tuples if t[0] == UPDATE_ACTION])
+        self.assertTrue(playerGotInfo('B', expectedJesseJonesInfo, tuples))
+        self.assertTrue(playerGotInfo('D', expectedOpponentInfo, tuples))
+        self.assertTrue(playersGotUpdate(expectedUpdate, tuples))
 
         self.assertEqual(players['B'].cardsInHand, expectedCardsDrawn)
         self.assertEqual(players['D'].cardsInHand, [])
@@ -1863,9 +1923,9 @@ class TestGameplay(TestCase):
         self.assertEqual(countEmitTypeToRecipient(tuples, SHOW_QUESTION_MODAL, players['B']), 1)
 
         tuples = game.processQuestionResponse('B', QUESTION_JESSE_JONES, FROM_ANOTHER_PLAYER)
-        self.assertTrue(any([expectedJesseJonesInfo in unescape(t[1]['html']) for t in tuples if t[0] == SHOW_INFO_MODAL and t[2] == players['B']]))
-        self.assertTrue(any([expectedOpponentInfo in unescape(t[1]['html']) for t in tuples if t[0] == SHOW_INFO_MODAL and t[2] == players['D']]))
-        self.assertTrue(expectedUpdate in [t[1]['update'] for t in tuples if t[0] == UPDATE_ACTION])
+        self.assertTrue(playerGotInfo('B', expectedJesseJonesInfo, tuples))
+        self.assertTrue(playerGotInfo('D', expectedOpponentInfo, tuples))
+        self.assertTrue(playersGotUpdate(expectedUpdate, tuples))
 
         self.assertEqual(players['B'].cardsInHand, expectedCardsDrawn)
         self.assertEqual(players['D'].cardsInHand, [])
@@ -1883,7 +1943,7 @@ class TestGameplay(TestCase):
         self.assertEqual(countEmitTypeToRecipient(tuples, SHOW_QUESTION_MODAL, players['B']), 1)
 
         tuples = game.processQuestionResponse('B', QUESTION_JESSE_JONES, FROM_THE_DECK)
-        self.assertTrue(any([expectedJesseJonesInfo in unescape(t[1]['html']) for t in tuples if t[0] == SHOW_INFO_MODAL and t[2] == players['B']]))
+        self.assertTrue(playerGotInfo('B', expectedJesseJonesInfo, tuples))
 
         self.assertEqual(players['B'].cardsInHand, expectedCardsDrawn)
         self.assertEqual(game.currentCard, None)
@@ -1896,10 +1956,10 @@ class TestGameplay(TestCase):
         expectedCardsDrawn = game.drawPile[-2:][::-1]
 
         tuples = game.startNextTurn('A')
-        self.assertEqual(getEmitTypes(tuples), {SHOW_INFO_MODAL, UPDATE_ACTION, UPDATE_PLAYER_LIST, RELOAD_PLAY_PAGE})
+        self.assertEqual(getEmitTypes(tuples), NEW_TURN_TUPLES)
         self.assertEqual(countEmitTypeToRecipient(tuples, SHOW_INFO_MODAL, players['B']), 1)
         self.assertEqual(countEmitTypeToRecipient(tuples, SHOW_QUESTION_MODAL, players['B']), 0)
-        self.assertTrue(any([expectedJesseJonesInfo in unescape(t[1]['html']) for t in tuples if t[0] == SHOW_INFO_MODAL and t[2] == players['B']]))
+        self.assertTrue(playerGotInfo('B', expectedJesseJonesInfo, tuples))
 
         self.assertEqual(players['B'].cardsInHand, expectedCardsDrawn)
         self.assertEqual(game.currentCard, None)
@@ -1916,9 +1976,9 @@ class TestGameplay(TestCase):
         game.drawPile.append(cardToDraw)
 
         tuples = game.validateCardChoice('A', 1)
-        self.assertTrue(any([expectedAttackerInfo in unescape(t[1]['html']) for t in tuples if t[0] == SHOW_INFO_MODAL and t[2] == players['A']]))
-        self.assertTrue(any([expectedJourdonnaisInfo in unescape(t[1]['html']) for t in tuples if t[0] == SHOW_INFO_MODAL and t[2] == players['B']]))
-        self.assertTrue(expectedUpdate in [t[1]['update'] for t in tuples if t[0] == UPDATE_ACTION])
+        self.assertTrue(playerGotInfo('A', expectedAttackerInfo, tuples))
+        self.assertTrue(playerGotInfo('B', expectedJourdonnaisInfo, tuples))
+        self.assertTrue(playersGotUpdate(expectedUpdate, tuples))
 
         self.assertEqual(players['B'].lives, 4)
         self.assertEqual(game.currentCard, None)
@@ -1934,8 +1994,8 @@ class TestGameplay(TestCase):
         game.drawPile.append(cardToDraw)
 
         tuples = game.validateCardChoice('A', 1)
-        self.assertTrue(any([expectedJourdonnaisInfo in unescape(t[1]['html']) for t in tuples if t[0] == SHOW_INFO_MODAL and t[2] == players['B']]))
-        self.assertTrue(expectedUpdate in [t[1]['update'] for t in tuples if t[0] == UPDATE_ACTION])
+        self.assertTrue(playerGotInfo('B', expectedJourdonnaisInfo, tuples))
+        self.assertTrue(playersGotUpdate(expectedUpdate, tuples))
 
         self.assertEqual(players['B'].lives, 3)
         self.assertEqual(game.currentCard, None)
@@ -1953,9 +2013,9 @@ class TestGameplay(TestCase):
         game.drawPile.extend(cardsToDraw)
 
         tuples = game.validateCardChoice('A', 1)
-        self.assertTrue(any([expectedAttackerInfo in unescape(t[1]['html']) for t in tuples if t[0] == SHOW_INFO_MODAL and t[2] == players['A']]))
-        self.assertTrue(any([expectedJourdonnaisInfo in unescape(t[1]['html']) for t in tuples if t[0] == SHOW_INFO_MODAL and t[2] == players['B']]))
-        self.assertTrue(expectedUpdate in [t[1]['update'] for t in tuples if t[0] == UPDATE_ACTION])
+        self.assertTrue(playerGotInfo('A', expectedAttackerInfo, tuples))
+        self.assertTrue(playerGotInfo('B', expectedJourdonnaisInfo, tuples))
+        self.assertTrue(playersGotUpdate(expectedUpdate, tuples))
 
         self.assertEqual(players['B'].lives, 4)
         self.assertEqual(game.discardPile, [game.getCardByUid(1)] + cardsToDraw[::-1])
@@ -1972,7 +2032,7 @@ class TestGameplay(TestCase):
         game.drawPile.extend(cardsToDraw)
 
         tuples = game.validateCardChoice('A', 1)
-        self.assertTrue(expectedUpdate in [t[1]['update'] for t in tuples if t[0] == UPDATE_ACTION])
+        self.assertTrue(playersGotUpdate(expectedUpdate, tuples))
 
         self.assertEqual(players['B'].lives, 3)
         self.assertEqual(game.discardPile, [game.getCardByUid(1)] + cardsToDraw[::-1])
@@ -1991,7 +2051,7 @@ class TestGameplay(TestCase):
             self.assertTrue([c.getQuestionString() in [t[1].values() for t in tuples if t[0] == SHOW_QUESTION_MODAL and t[2] == players['B']] for c in expectedOptions])
 
             tuples = game.processQuestionResponse('B', QUESTION_KIT_CARLSON, expectedOptions[cardIndex].getQuestionString())
-            self.assertTrue(any([expectedKitCarlsonInfo in t[1]['html'] for t in tuples if t[0] == SHOW_INFO_MODAL and t[2] == players['B']]))
+            self.assertTrue(playerGotInfo('B', expectedKitCarlsonInfo, tuples))
 
             self.assertEqual(players['B'].cardsInHand, [c for (i, c) in enumerate(expectedOptions) if i != cardIndex])
             self.assertEqual(game.drawPile[-1], expectedOptions[cardIndex])
@@ -2010,15 +2070,15 @@ class TestGameplay(TestCase):
         game.drawPile.extend([heartCard, clubCard])
 
         tuples = game.validateCardChoice('A', 1)
-        questionTuple = [t for t in tuples if t[0] == SHOW_QUESTION_MODAL and t[2] == players['B']][0]
+        questionTuple = getQuestionTuple('B', tuples)
         self.assertEqual(countEmitTypeToRecipient(tuples, SHOW_QUESTION_MODAL, players['B']), 1)
         self.assertEqual(questionTuple[1]['question'], QUESTION_LUCKY_DUKE.format('Bang'))
         self.assertEqual(questionTuple[1]['option1'], clubCard.getQuestionString())
         self.assertEqual(questionTuple[1]['option2'], heartCard.getQuestionString())
 
         tuples = game.processQuestionResponse('B', QUESTION_LUCKY_DUKE.format('Bang'), heartCard.getQuestionString())
-        self.assertTrue(any(["B drew a heart for Barile and avoided your Bang!" in t[1]['html'] for t in tuples if t[0] == SHOW_INFO_MODAL and t[2] == players['A']]))
-        self.assertTrue(any(["You drew a heart for Barile and avoided the Bang!" in t[1]['html'] for t in tuples if t[0] == SHOW_INFO_MODAL and t[2] == players['B']]))
+        self.assertTrue(playerGotInfo('A', "B drew a heart for Barile and avoided your Bang!", tuples))
+        self.assertTrue(playerGotInfo('B', "You drew a heart for Barile and avoided the Bang!", tuples))
 
         self.assertEqual(players['B'].lives, 4)
         self.assertEqual(game.discardPile, [game.getCardByUid(1), clubCard, heartCard])
@@ -2036,7 +2096,7 @@ class TestGameplay(TestCase):
         game.drawPile.extend([diamondCard, clubCard])
 
         tuples = game.validateCardChoice('A', 1)
-        questionTuple = [t for t in tuples if t[0] == SHOW_QUESTION_MODAL and t[2] == players['B']][0]
+        questionTuple = getQuestionTuple('B', tuples)
         self.assertEqual(countEmitTypeToRecipient(tuples, SHOW_QUESTION_MODAL, players['B']), 1)
         self.assertEqual(questionTuple[1]['question'], QUESTION_LUCKY_DUKE.format('Bang'))
         self.assertEqual(questionTuple[1]['option1'], clubCard.getQuestionString())
@@ -2044,12 +2104,97 @@ class TestGameplay(TestCase):
 
         tuples = game.processQuestionResponse('B', QUESTION_LUCKY_DUKE.format('Bang'), diamondCard.getQuestionString())
         self.assertEqual(countEmitTypeToRecipient(tuples, SHOW_WAITING_MODAL, players['A']), 1)
-        self.assertTrue(any(["B took the hit" in t[1]['html'] for t in tuples if t[0] == SHOW_INFO_MODAL and t[2] == players['A']]))
-        self.assertTrue(any(["You didn't draw a heart for Barile" in unescape(t[1]['html']) for t in tuples if t[0] == SHOW_INFO_MODAL and t[2] == players['B']]))
-        self.assertTrue(any(["You were hit by the Bang" in t[1]['html'] for t in tuples if t[0] == SHOW_INFO_MODAL and t[2] == players['B']]))
+        self.assertTrue(playerGotInfo('A', "B took the hit", tuples))
+        self.assertTrue(playerGotInfo('B', "You didn't draw a heart for Barile", tuples))
+        self.assertTrue(playerGotInfo('B', "You were hit by the Bang", tuples))
 
         self.assertEqual(players['B'].lives, 3)
         self.assertEqual(game.discardPile, [game.getCardByUid(1), clubCard, diamondCard])
+        self.assertEqual(game.currentCard, None)
+
+    # Lucky Duke: Draw successfuly for dynamite then draw normally at the start of the turn.
+    def testLuckyDukeDynamite(self):
+        setDefaults()
+        setPlayerCharacter('B', LUCKY_DUKE)
+        setPlayerSpecialCards({'B': [game.getDynamiteCard().uid]})
+        game.dynamiteUsername = 'B'
+        game.dynamiteStartTurn = 1
+        heartCard = getCardsOfASuit(HEART, 1)[0]
+        spadeCard = getCardsOfASuit(SPADE, 1)[0]
+        expectedCardsDrawn = game.drawPile[-2:][::-1]
+        game.drawPile.extend([spadeCard, heartCard])
+
+        game.startNextTurn('A')
+
+        tuples = game.processQuestionResponse('B', QUESTION_LUCKY_DUKE.format('Dynamite'), heartCard.getQuestionString())
+        self.assertTrue(playerGotInfo('B', "The dynamite didn't explode on you", tuples))
+        self.assertTrue(playerGotInfo('B', "You drew {}".format(utils.convertCardsDrawnToString(expectedCardsDrawn)), tuples))
+        self.assertTrue(playerGotInfo('C', "The dynamite didn't explode on B, so you'll have it next turn", tuples))
+        self.assertTrue(playersGotUpdate("The dynamite didn't explode on B, so now C has it.", tuples))
+
+        self.assertEqual(players['B'].lives, 4)
+        self.assertEqual(players['B'].cardsInHand, expectedCardsDrawn)
+        self.assertEqual(players['B'].specialCards, [])
+        self.assertEqual(players['C'].specialCards, [game.getDynamiteCard()])
+
+        self.assertEqual(game.dynamiteUsername, 'C')
+        self.assertEqual(game.discardPile, [spadeCard, heartCard])
+        self.assertEqual(game.currentCard, None)
+
+    # Lucky Duke: Draw successfuly for jail then draw normally at the start of the turn.
+    def testLuckyDukePrigione(self):
+        setDefaults()
+        setPlayerCharacter('B', LUCKY_DUKE)
+        setPlayerSpecialCards({'B': [69]})
+        players['B'].jailStatus = 1
+        heartCard = getCardsOfASuit(HEART, 1)[0]
+        clubCard = getCardsOfASuit(CLUB, 1)[0]
+        expectedCardsDrawn = game.drawPile[-2:][::-1]
+        game.drawPile.extend([clubCard, heartCard])
+
+        game.startNextTurn('A')
+
+        tuples = game.processQuestionResponse('B', QUESTION_LUCKY_DUKE.format('Prigione'), heartCard.getQuestionString())
+        self.assertTrue(playerGotInfo('B', "You drew a heart, so you got out of jail!", tuples))
+        self.assertTrue(playerGotInfo('B', "You drew {}".format(utils.convertCardsDrawnToString(expectedCardsDrawn)), tuples))
+        self.assertTrue(playersGotUpdate("B drew a heart, so they get to play this turn.", tuples))
+        self.assertFalse((END_YOUR_TURN, dict(), players['B']) in tuples)
+        self.assertTrue(playersGotUpdate(DREW_2_CARDS.format('B'), tuples))
+
+        self.assertEqual(players['B'].jailStatus, 0)
+        self.assertEqual(players['B'].cardsInHand, expectedCardsDrawn)
+        self.assertEqual(players['B'].specialCards, [])
+        self.assertEqual(game.playerOrder[0], players['B'])
+
+        self.assertEqual(game.discardPile, [clubCard, heartCard, game.getCardByUid(69)])
+        self.assertEqual(game.currentCard, None)
+
+    # Lucky Duke: Draw successfuly for dynamite and jail together and then draw normally at the start of the turn.
+    def testLuckyDukeDynamiteAndJail(self):
+        setDefaults()
+        setPlayerCharacter('B', LUCKY_DUKE)
+        setPlayerSpecialCards({'B': [game.getDynamiteCard().uid, 69]})
+        game.dynamiteUsername = 'B'
+        game.dynamiteStartTurn = 1
+        players['B'].jailStatus = 1
+        heartCards = getCardsOfASuit(HEART, 2)
+        diamondCards = getCardsOfASuit(DIAMOND, 2)
+        expectedCardsDrawn = game.drawPile[-2:][::-1]
+        game.drawPile.extend(heartCards[:1] + diamondCards + heartCards[1:])
+
+        game.startNextTurn('A')
+
+        game.processQuestionResponse('B', QUESTION_LUCKY_DUKE.format('Dynamite'), heartCards[1].getQuestionString())
+        
+        game.processQuestionResponse('B', QUESTION_LUCKY_DUKE.format('Prigione'), heartCards[0].getQuestionString())
+
+        self.assertEqual(players['B'].jailStatus, 0)
+        self.assertEqual(players['B'].cardsInHand, expectedCardsDrawn)
+        self.assertEqual(players['B'].specialCards, [])
+        self.assertEqual(game.playerOrder[0], players['B'])
+
+        self.assertEqual(game.dynamiteUsername, 'C')
+        self.assertEqual(game.discardPile, [diamondCards[1], heartCards[1], diamondCards[0], heartCards[0], game.getCardByUid(69)])
         self.assertEqual(game.currentCard, None)
 
     # Paul Regret: Be out of range for a 1-range Bang without a Mustang in play.
@@ -2060,7 +2205,7 @@ class TestGameplay(TestCase):
 
         game.validateCardChoice('A', 1)
         tuples = game.processQuestionResponse('A', QUESTION_WHO_TO_SHOOT, 'B')
-        self.assertTrue(any(["B is out of range" in t[1]['html'] for t in tuples if t[0] == SHOW_INFO_MODAL and t[2] == players['A']]))
+        self.assertTrue(playerGotInfo('A', "B is out of range", tuples))
 
         self.assertEqual(players['B'].lives, 4)
         self.assertEqual(game.currentCard, None)
@@ -2089,7 +2234,7 @@ class TestGameplay(TestCase):
 
         game.validateCardChoice('A', 1)
         tuples = game.processQuestionResponse('A', QUESTION_WHO_TO_SHOOT, 'C')
-        self.assertTrue(any(["C is out of range" in t[1]['html'] for t in tuples if t[0] == SHOW_INFO_MODAL and t[2] == players['A']]))
+        self.assertTrue(playerGotInfo('A', "C is out of range", tuples))
 
         self.assertEqual(players['C'].lives, 4)
         self.assertEqual(game.currentCard, None)
@@ -2109,8 +2254,8 @@ class TestGameplay(TestCase):
 
         tuples = game.processQuestionResponse('B', QUESTION_PEDRO_RAMIREZ, FROM_DISCARD)
         self.assertEqual(getEmitTypes(tuples), {SHOW_INFO_MODAL, UPDATE_ACTION, UPDATE_DISCARD_PILE, UPDATE_CARD_HAND})
-        self.assertTrue(expectedUpdate in [t[1]['update'] for t in tuples if t[0] == UPDATE_ACTION])
-        self.assertTrue(any([expectedPedroInfo in t[1]['html'] for t in tuples if t[0] == SHOW_INFO_MODAL and t[2] == players['B']]))
+        self.assertTrue(playersGotUpdate(expectedUpdate, tuples))
+        self.assertTrue(playerGotInfo('B', expectedPedroInfo, tuples))
 
         self.assertEqual(players['B'].cardsInHand, [discardCard, drawCard])
         self.assertEqual(game.discardPile, [])
@@ -2130,9 +2275,9 @@ class TestGameplay(TestCase):
         self.assertEqual(countEmitTypeToRecipient(tuples, SHOW_QUESTION_MODAL, players['B']), 1)
 
         tuples = game.processQuestionResponse('B', QUESTION_PEDRO_RAMIREZ, FROM_THE_DECK)
-        self.assertEqual(getEmitTypes(tuples), {SHOW_INFO_MODAL, UPDATE_ACTION, UPDATE_CARD_HAND})
-        self.assertTrue(expectedUpdate in [t[1]['update'] for t in tuples if t[0] == UPDATE_ACTION])
-        self.assertTrue(any([expectedPedroInfo in t[1]['html'] for t in tuples if t[0] == SHOW_INFO_MODAL and t[2] == players['B']]))
+        self.assertEqual(getEmitTypes(tuples), {SHOW_INFO_MODAL, UPDATE_ACTION, UPDATE_CARD_HAND, UPDATE_DISCARD_PILE})
+        self.assertTrue(playersGotUpdate(expectedUpdate, tuples))
+        self.assertTrue(playerGotInfo('B', expectedPedroInfo, tuples))
 
         self.assertEqual(players['B'].cardsInHand, drawnCards)
         self.assertEqual(game.discardPile, [discardCard])
@@ -2147,9 +2292,9 @@ class TestGameplay(TestCase):
         expectedUpdate = "B drew 2 cards from the deck.".format()
 
         tuples = game.startNextTurn('A')
-        self.assertEqual(getEmitTypes(tuples), {SHOW_INFO_MODAL, UPDATE_ACTION, UPDATE_PLAYER_LIST, RELOAD_PLAY_PAGE})
-        self.assertTrue(expectedUpdate in [t[1]['update'] for t in tuples if t[0] == UPDATE_ACTION])
-        self.assertTrue(any([expectedPedroInfo in t[1]['html'] for t in tuples if t[0] == SHOW_INFO_MODAL and t[2] == players['B']]))
+        self.assertEqual(getEmitTypes(tuples), NEW_TURN_TUPLES)
+        self.assertTrue(playersGotUpdate(expectedUpdate, tuples))
+        self.assertTrue(playerGotInfo('B', expectedPedroInfo, tuples))
 
         self.assertEqual(players['B'].cardsInHand, drawnCards)
         self.assertEqual(game.discardPile, [])
@@ -2209,8 +2354,8 @@ class TestGameplay(TestCase):
 
         tuples = game.useSpecialAbility('A')
         self.assertEqual(getEmitTypes(tuples), {SHOW_INFO_MODAL, UPDATE_PLAYER_LIST} | CARD_PLAYED_TUPLES)
-        self.assertTrue(any([expectedInfo in unescape(t[1]['html']) for t in tuples if t[0] == SHOW_INFO_MODAL and t[2] == players['A']]))
-        self.assertTrue(expectedUpdate in [t[1]['update'] for t in tuples if t[0] == UPDATE_ACTION])
+        self.assertTrue(playerGotInfo('A', expectedInfo, tuples))
+        self.assertTrue(playersGotUpdate(expectedUpdate, tuples))
 
         self.assertEqual(players['A'].lives, 5)
         self.assertEqual(players['A'].cardsInHand, [])
@@ -2229,7 +2374,7 @@ class TestGameplay(TestCase):
 
         for uidPair in [(20, 30), (50, 60)]:
             tuples = game.useSpecialAbility('A')
-            self.assertTrue(any([SID_KETCHUM_INFO in t[1]['html'] for t in tuples if t[0] == SHOW_INFO_MODAL and t[2] == players['A']]))
+            self.assertTrue(playerGotInfo('A', SID_KETCHUM_INFO, tuples))
             
             tuples = game.playerDiscardingCard('A', uidPair[0])
             self.assertEqual(getEmitTypes(tuples), {UPDATE_CARD_HAND, DISCARD_CLICK})
@@ -2254,7 +2399,7 @@ class TestGameplay(TestCase):
             expectedInfo = "You don't have enough cards to use your special ability right now."
 
             tuples = game.useSpecialAbility('A')
-            self.assertTrue(any([expectedInfo in unescape(t[1]['html']) for t in tuples if t[0] == SHOW_INFO_MODAL and t[2] == players['A']]))
+            self.assertTrue(playerGotInfo('A', expectedInfo, tuples))
 
             self.assertEqual(players['A'].lives, 4)
             self.assertEqual(players['A'].cardsInHand, [game.getCardByUid(uid) for uid in uids])
@@ -2270,7 +2415,7 @@ class TestGameplay(TestCase):
         setPlayerCardsInHand({'A': [20, 30]})
 
         tuples = game.useSpecialAbility('A')
-        self.assertTrue(any([ALREADY_MAX_LIVES in unescape(t[1]['html']) for t in tuples if t[0] == SHOW_INFO_MODAL and t[2] == players['A']]))
+        self.assertTrue(playerGotInfo('A', ALREADY_MAX_LIVES, tuples))
 
         self.assertEqual(players['A'].lives, 5)
         self.assertEqual(players['A'].cardsInHand, [game.getCardByUid(20), game.getCardByUid(30)])
@@ -2287,8 +2432,8 @@ class TestGameplay(TestCase):
         expectedOpponentInfo = "You were hit by the Bang"
 
         tuples = game.validateCardChoice('A', 1)
-        self.assertTrue(any([expectedSlabInfo in t[1]['html'] for t in tuples if t[0] == SHOW_INFO_MODAL and t[2] == players['A']]))
-        self.assertTrue(any([expectedOpponentInfo in t[1]['html'] for t in tuples if t[0] == SHOW_INFO_MODAL and t[2] == players['B']]))
+        self.assertTrue(playerGotInfo('A', expectedSlabInfo, tuples))
+        self.assertTrue(playerGotInfo('B', expectedOpponentInfo, tuples))
 
         self.assertEqual(players['B'].lives, 3)
 
@@ -2309,15 +2454,15 @@ class TestGameplay(TestCase):
         self.assertEqual(countEmitTypeToRecipient(tuples, SHOW_WAITING_MODAL, players['A']), 1)
         self.assertEqual(countEmitTypeToRecipient(tuples, SHOW_QUESTION_MODAL, players['B']), 1)
         
-        questionTuple = [t for t in tuples if t[0] == SHOW_QUESTION_MODAL and t[2] == players['B']][0]
+        questionTuple = getQuestionTuple('B', tuples)
         self.assertTrue(PLAY_A_MANCATO not in questionTuple[1].values())
         self.assertTrue(PLAY_TWO_MANCATOS in questionTuple[1].values())
         self.assertTrue(LOSE_A_LIFE in questionTuple[1].values())
 
         tuples = game.processQuestionResponse('B', QUESTION_BANG_REACTION.format('A'), PLAY_TWO_MANCATOS)
-        self.assertTrue(any([expectedSlabInfo in unescape(t[1]['html']) for t in tuples if t[0] == SHOW_INFO_MODAL and t[2] == players['A']]))
-        self.assertTrue(any([expectedOpponentInfo in t[1]['html'] for t in tuples if t[0] == SHOW_INFO_MODAL and t[2] == players['B']]))
-        self.assertTrue(expectedUpdate in [t[1]['update'] for t in tuples if t[0] == UPDATE_ACTION])
+        self.assertTrue(playerGotInfo('A', expectedSlabInfo, tuples))
+        self.assertTrue(playerGotInfo('B', expectedOpponentInfo, tuples))
+        self.assertTrue(playersGotUpdate(expectedUpdate, tuples))
 
         self.assertEqual(players['B'].lives, 4)
 
@@ -2339,15 +2484,15 @@ class TestGameplay(TestCase):
         
         tuples = game.processQuestionResponse('B', QUESTION_BANG_REACTION.format('A'), PLAY_TWO_MANCATOS)
         self.assertEqual(countEmitTypeToRecipient(tuples, BLUR_CARD_SELECTION, players['B']), 1)
-        self.assertTrue(any(["Click on the first Mancato in your hand" in t[1]['html'] for t in tuples if t[0] == SHOW_INFO_MODAL and t[2] == players['B']]))
+        self.assertTrue(playerGotInfo('B', "Click on the first Mancato in your hand that you want to use", tuples))
         
         tuples = game.processBlurCardSelection('B', 27)
         self.assertEqual(countEmitTypeToRecipient(tuples, BLUR_CARD_SELECTION, players['B']), 1)
-        self.assertTrue(any(["Click on the second Mancato in your hand" in t[1]['html'] for t in tuples if t[0] == SHOW_INFO_MODAL and t[2] == players['B']]))
+        self.assertTrue(playerGotInfo('B', "Click on the second Mancato in your hand that you want to use", tuples))
 
         tuples = game.processBlurCardSelection('B', 28)
-        self.assertTrue(any([expectedSlabInfo in unescape(t[1]['html']) for t in tuples if t[0] == SHOW_INFO_MODAL and t[2] == players['A']]))
-        self.assertTrue(expectedUpdate in [t[1]['update'] for t in tuples if t[0] == UPDATE_ACTION])
+        self.assertTrue(playerGotInfo('A', expectedSlabInfo, tuples))
+        self.assertTrue(playersGotUpdate(expectedUpdate, tuples))
 
         self.assertEqual(players['B'].lives, 4)
 
@@ -2373,8 +2518,8 @@ class TestGameplay(TestCase):
         game.processBlurCardSelection('B', 2)
 
         tuples = game.processBlurCardSelection('B', 4)
-        self.assertTrue(any([expectedSlabInfo in unescape(t[1]['html']) for t in tuples if t[0] == SHOW_INFO_MODAL and t[2] == players['A']]))
-        self.assertTrue(expectedUpdate in [t[1]['update'] for t in tuples if t[0] == UPDATE_ACTION])
+        self.assertTrue(playerGotInfo('A', expectedSlabInfo, tuples))
+        self.assertTrue(playersGotUpdate(expectedUpdate, tuples))
 
         self.assertEqual(players['B'].lives, 4)
 
@@ -2415,7 +2560,7 @@ class TestGameplay(TestCase):
         question = QUESTION_SLAB_BARILE_ONE.format('A')
 
         tuples = game.validateCardChoice('A', 1)
-        questionTuple = [t for t in tuples if t[0] == SHOW_QUESTION_MODAL and t[2] == players['B']][0]
+        questionTuple = getQuestionTuple('B', tuples)
         self.assertEqual(questionTuple[1]['question'], question)
         
         game.processQuestionResponse('B', question, LOSE_A_LIFE)
@@ -2480,7 +2625,7 @@ class TestGameplay(TestCase):
 
         tuples = game.validateCardChoice('A', 54)
         self.assertEqual(countEmitTypeToRecipient(tuples, SHOW_QUESTION_MODAL, players['B']), 1)
-        questionTuple = [t for t in tuples if t[0] == SHOW_QUESTION_MODAL and t[2] == players['B']][0]
+        questionTuple = getQuestionTuple('B', tuples)
         self.assertEqual(questionTuple[1]['question'], question)
 
         game.processQuestionResponse('B', question, PLAY_A_MANCATO)
@@ -2529,9 +2674,9 @@ class TestGameplay(TestCase):
         expectedUpdate = "A drew a card using Suzy Lafayette's ability."
 
         tuples = game.validateCardChoice('A', 66)
-        self.assertEqual(getEmitTypes(tuples), {SHOW_INFO_MODAL, UPDATE_CARD_HAND, UPDATE_ACTION, UPDATE_CARDS_IN_PLAY})
-        self.assertTrue(any([expectedInfo in unescape(t[1]['html']) for t in tuples if t[0] == SHOW_INFO_MODAL and t[2] == players['A']]))
-        self.assertTrue(expectedUpdate in [t[1]['update'] for t in tuples if t[0] == UPDATE_ACTION])
+        self.assertEqual(getEmitTypes(tuples), {SHOW_INFO_MODAL, UPDATE_CARD_HAND, UPDATE_ACTION, UPDATE_CARDS_IN_PLAY, UPDATE_DISCARD_PILE})
+        self.assertTrue(playerGotInfo('A', expectedInfo, tuples))
+        self.assertTrue(playersGotUpdate(expectedUpdate, tuples))
 
         self.assertEqual(players['A'].cardsInHand, [expectedCardDrawn])
         self.assertTrue(expectedCardDrawn not in game.drawPile)
@@ -2557,8 +2702,8 @@ class TestGameplay(TestCase):
 
             tuples = game.processQuestionResponse('B', question.format('A'), answer)
             self.assertEqual(getEmitTypes(tuples), {SHOW_INFO_MODAL, UPDATE_CARD_HAND, UPDATE_ACTION, UPDATE_DISCARD_PILE})
-            self.assertTrue(any([expectedInfo in unescape(t[1]['html']) for t in tuples if t[0] == SHOW_INFO_MODAL and t[2] == players['B']]))
-            self.assertTrue(expectedUpdate in [t[1]['update'] for t in tuples if t[0] == UPDATE_ACTION])
+            self.assertTrue(playerGotInfo('B', expectedInfo, tuples))
+            self.assertTrue(playersGotUpdate(expectedUpdate, tuples))
 
             self.assertEqual(players['B'].cardsInHand, [expectedCardDrawn])
             self.assertTrue(expectedCardDrawn not in game.drawPile)
@@ -2581,8 +2726,8 @@ class TestGameplay(TestCase):
         tuples = game.processQuestionResponse('A', QUESTION_DUELLO_BANG_REACTION.format('B'), PLAY_A_BANG)
 
         self.assertEqual(getEmitTypes(tuples), {SHOW_INFO_MODAL, UPDATE_CARD_HAND, UPDATE_ACTION, UPDATE_DISCARD_PILE, UPDATE_PLAYER_LIST})
-        self.assertTrue(any([expectedInfo in unescape(t[1]['html']) for t in tuples if t[0] == SHOW_INFO_MODAL and t[2] == players['A']]))
-        self.assertTrue(expectedUpdate in [t[1]['update'] for t in tuples if t[0] == UPDATE_ACTION])
+        self.assertTrue(playerGotInfo('A', expectedInfo, tuples))
+        self.assertTrue(playersGotUpdate(expectedUpdate, tuples))
 
         self.assertEqual(players['A'].cardsInHand, [expectedCardDrawn])
         self.assertTrue(expectedCardDrawn not in game.drawPile)
@@ -2603,9 +2748,9 @@ class TestGameplay(TestCase):
         game.processQuestionResponse('B', QUESTION_DUELLO_REACTION.format('A'), PLAY_A_BANG)
 
         tuples = game.processQuestionResponse('A', QUESTION_DUELLO_BANG_REACTION.format('B'), LOSE_A_LIFE)
-        self.assertEqual(getEmitTypes(tuples), {SHOW_INFO_MODAL, UPDATE_CARD_HAND, UPDATE_ACTION, UPDATE_PLAYER_LIST})
-        self.assertTrue(any([expectedInfo in unescape(t[1]['html']) for t in tuples if t[0] == SHOW_INFO_MODAL and t[2] == players['B']]))
-        self.assertTrue(expectedUpdate in [t[1]['update'] for t in tuples if t[0] == UPDATE_ACTION])
+        self.assertEqual(getEmitTypes(tuples), {SHOW_INFO_MODAL, UPDATE_CARD_HAND, UPDATE_ACTION, UPDATE_PLAYER_LIST, UPDATE_DISCARD_PILE})
+        self.assertTrue(playerGotInfo('B', expectedInfo, tuples))
+        self.assertTrue(playersGotUpdate(expectedUpdate, tuples))
 
         self.assertEqual(players['B'].cardsInHand, [expectedCardDrawn])
         self.assertTrue(expectedCardDrawn not in game.drawPile)
@@ -2624,8 +2769,8 @@ class TestGameplay(TestCase):
 
             tuples = game.validateCardChoice('A', uid)
             self.assertEqual(getEmitTypes(tuples), {SHOW_INFO_MODAL, UPDATE_CARD_HAND, UPDATE_ACTION, UPDATE_DISCARD_PILE})
-            self.assertTrue(any([expectedInfo in unescape(t[1]['html']) for t in tuples if t[0] == SHOW_INFO_MODAL and t[2] == players['B']]))
-            self.assertTrue(expectedUpdate in [t[1]['update'] for t in tuples if t[0] == UPDATE_ACTION])
+            self.assertTrue(playerGotInfo('B', expectedInfo, tuples))
+            self.assertTrue(playersGotUpdate(expectedUpdate, tuples))
 
             self.assertEqual(players['B'].cardsInHand, [expectedCardDrawn])
             self.assertTrue(expectedCardDrawn not in game.drawPile)
@@ -2643,8 +2788,8 @@ class TestGameplay(TestCase):
 
         tuples = game.validateCardChoice('A', 1)
         self.assertEqual(getEmitTypes(tuples), {SHOW_INFO_MODAL, UPDATE_CARD_HAND, UPDATE_ACTION, UPDATE_DISCARD_PILE, UPDATE_PLAYER_LIST})
-        self.assertTrue(any([expectedInfo in unescape(t[1]['html']) for t in tuples if t[0] == SHOW_INFO_MODAL and t[2] == players['B']]))
-        self.assertTrue(expectedUpdate in [t[1]['update'] for t in tuples if t[0] == UPDATE_ACTION])
+        self.assertTrue(playerGotInfo('B', expectedInfo, tuples))
+        self.assertTrue(playersGotUpdate(expectedUpdate, tuples))
 
         self.assertEqual(players['B'].lives, 1)
 
@@ -2666,9 +2811,9 @@ class TestGameplay(TestCase):
         self.assertEqual(players['A'].cardsInHand, [game.getCardByUid(2)])
 
         tuples = game.processQuestionResponse('B', QUESTION_BANG_REACTION.format('A'), LOSE_A_LIFE)
-        self.assertEqual(getEmitTypes(tuples), {SHOW_INFO_MODAL, UPDATE_CARD_HAND, UPDATE_ACTION, UPDATE_PLAYER_LIST})
-        self.assertTrue(any([expectedInfo in unescape(t[1]['html']) for t in tuples if t[0] == SHOW_INFO_MODAL and t[2] == players['A']]))
-        self.assertTrue(expectedUpdate in [t[1]['update'] for t in tuples if t[0] == UPDATE_ACTION])
+        self.assertEqual(getEmitTypes(tuples), {SHOW_INFO_MODAL, UPDATE_CARD_HAND, UPDATE_ACTION, UPDATE_PLAYER_LIST, UPDATE_DISCARD_PILE})
+        self.assertTrue(playerGotInfo('A', expectedInfo, tuples))
+        self.assertTrue(playersGotUpdate(expectedUpdate, tuples))
 
         self.assertEqual(players['A'].cardsInHand, [expectedCardDrawn])
         self.assertTrue(expectedCardDrawn not in game.drawPile)
@@ -2687,9 +2832,9 @@ class TestGameplay(TestCase):
         game.startNextTurn('A')
 
         tuples = game.processQuestionResponse('B', QUESTION_JESSE_JONES, FROM_ANOTHER_PLAYER)
-        self.assertEqual(getEmitTypes(tuples), {SHOW_INFO_MODAL, UPDATE_CARD_HAND, UPDATE_ACTION})
-        self.assertTrue(any([expectedInfo in unescape(t[1]['html']) for t in tuples if t[0] == SHOW_INFO_MODAL and t[2] == players['C']]))
-        self.assertTrue(expectedUpdate in [t[1]['update'] for t in tuples if t[0] == UPDATE_ACTION])
+        self.assertEqual(getEmitTypes(tuples), {SHOW_INFO_MODAL, UPDATE_CARD_HAND, UPDATE_ACTION, UPDATE_DISCARD_PILE})
+        self.assertTrue(playerGotInfo('C', expectedInfo, tuples))
+        self.assertTrue(playersGotUpdate(expectedUpdate, tuples))
 
         self.assertEqual(players['C'].cardsInHand, [expectedCardDrawn])
         self.assertTrue(expectedCardDrawn not in game.drawPile)
@@ -2711,8 +2856,8 @@ class TestGameplay(TestCase):
 
         tuples = game.validateCardChoice('A', 54)
         self.assertEqual(getEmitTypes(tuples), {SHOW_INFO_MODAL, UPDATE_CARD_HAND, UPDATE_ACTION, UPDATE_PLAYER_LIST, UPDATE_DISCARD_PILE})
-        self.assertTrue(any([expectedInfo in unescape(t[1]['html']) for t in tuples if t[0] == SHOW_INFO_MODAL and t[2] == players['C']]))
-        self.assertTrue(expectedUpdate in [t[1]['update'] for t in tuples if t[0] == UPDATE_ACTION])
+        self.assertTrue(playerGotInfo('C', expectedInfo, tuples))
+        self.assertTrue(playersGotUpdate(expectedUpdate, tuples))
 
         self.assertEqual(players['B'].lives, 0)
 
@@ -2720,7 +2865,7 @@ class TestGameplay(TestCase):
         self.assertEqual(players['C'].cardsInHand, [game.getCardByUid(uid) for uid in cardsInHand + cardsInPlay + jailCard])
         self.assertEqual(game.currentCard, None)
 
-    # Willy the Kid: Successfully play one, two, and three Bangs in one turn.
+    # Willy the Kid: Successfully play one, two, and even three Bangs in one turn.
     def testWillyTheKid(self):
         for bangAmount in range(1, 4):
             setDefaults(numPlayers=2)
@@ -2738,84 +2883,766 @@ class TestGameplay(TestCase):
 
 
 
-
-    ''' Drawing cards to start the turn tests. '''
-
-    # Drawing for dynamite only (both success and failure).
-
-    # Drawing for jail only (both success and failure).
-
-    # Drawing for dynamite and jail (all 4 combinations of success and failure).
-
-
-
-
     ''' Having cards in play tests. '''
 
     # Unsuccessfully putting down a duplicate card type.
+    def testCardInPlayDuplicate(self):
+        for (inHandUid, inPlayUid) in [[64, 65], [67, 68]]:
+            setDefaults()
+            setPlayerCardsInHand({'A': [inHandUid]})
+            setPlayerCardsInPlay({'A': [inPlayUid]})
+            inHandCard = game.getCardByUid(inHandUid)
+            inPlayCard = game.getCardByUid(inPlayUid)
+            expectedInfo = "You already have {} in play".format(inPlayCard.getDeterminerString())
+
+            self.assertEqual(inHandCard.name, inPlayCard.name)
+
+            tuples = game.validateCardChoice('A', inHandUid)
+            self.assertTrue(playerGotInfo('A', expectedInfo, tuples))
+            
+            self.assertEqual(players['A'].cardsInHand, [inHandCard])
+            self.assertEqual(players['A'].cardsInPlay, [inPlayCard])
+            self.assertEqual(game.currentCard, None)
 
     # Choosing to replace one in-play card with another when 2 are down.
+    def testInPlayReplacingACard(self):
+        cardsInPlay = [66, 67]
+        
+        for i, cardInPlay in enumerate(map(game.getCardByUid, cardsInPlay)):
+            setDefaults()
+            setPlayerCardsInHand({'A': [64]})
+            setPlayerCardsInPlay({'A': cardsInPlay})
+            cardInHand = game.getCardByUid(64)
+            remainingCardInPlay = game.getCardByUid(cardsInPlay[int(not bool(i))])
+            expectedUpdate = "A discarded {} and put {} in play.".format(cardInPlay.getDeterminerString(), cardInHand.getDeterminerString())
+            expectedCardsInHand = [cardInHand, remainingCardInPlay] if i == 0 else [remainingCardInPlay, cardInHand]
+
+            tuples = game.validateCardChoice('A', 64)
+            questionTuple = getQuestionTuple('A', tuples)
+            self.assertEqual(questionTuple[1]['question'], QUESTION_IN_PLAY)
+            
+            answer = "Replace the {}.".format(cardInPlay.getQuestionString())
+            tuples = game.processQuestionResponse('A', QUESTION_IN_PLAY, answer)
+            self.assertEqual(getEmitTypes(tuples), {UPDATE_CARD_HAND, UPDATE_CARDS_IN_PLAY, UPDATE_DISCARD_PILE, UPDATE_ACTION})
+            self.assertTrue(playersGotUpdate(expectedUpdate, tuples))
+
+            self.assertEqual(players['A'].cardsInHand, [])
+            self.assertEqual(players['A'].cardsInPlay, expectedCardsInHand)
+            self.assertEqual(game.discardPile, [cardInPlay])
+            self.assertEqual(game.currentCard, None)
 
     # Choosing not to replace one in-play card with another when 2 are down.
+    def testInPlayNotReplacingCard(self):
+        setDefaults()
+        setPlayerCardsInHand({'A': [64]})
+        setPlayerCardsInPlay({'A': [66, 67]})
 
-    # Choosing to replace an in-play gun with a new one.
+        game.validateCardChoice('A', 64)
+        
+        tuples = game.processQuestionResponse('A', QUESTION_IN_PLAY, KEEP_CURRENT_CARDS)
+        self.assertEqual(tuples, [])
+
+        self.assertEqual(players['A'].cardsInHand, [game.getCardByUid(64)])
+        self.assertEqual(players['A'].cardsInPlay, [game.getCardByUid(66), game.getCardByUid(67)])
+        self.assertEqual(game.discardPile, [])
+        self.assertEqual(game.currentCard, None)
+
+    # Choosing to replace an in-play gun with a new one given 1 or 2 in-play card(s).
+    def testInPlayReplacingGun(self):
+        for secondInPlayUid in [[], [67]]:
+            setDefaults()
+            setPlayerCardsInHand({'A': [75]})
+            setPlayerCardsInPlay({'A': [78] + secondInPlayUid})
+            newGun = game.getCardByUid(75)
+            currentGun = game.getCardByUid(78)
+            expectedUpdate = "A discarded {} and put {} in play.".format(currentGun.getDeterminerString(), newGun.getDeterminerString())
+
+            tuples = game.validateCardChoice('A', 75)
+            questionTuple = getQuestionTuple('A', tuples)
+            self.assertEqual(questionTuple[1]['question'], QUESTION_REPLACE_GUN)
+            
+            answer = REPLACE_GUN.format(currentGun.getDisplayName(), newGun.getDisplayName())
+            tuples = game.processQuestionResponse('A', QUESTION_REPLACE_GUN, answer)
+            self.assertEqual(getEmitTypes(tuples), {UPDATE_CARD_HAND, UPDATE_CARDS_IN_PLAY, UPDATE_DISCARD_PILE, UPDATE_ACTION})
+            self.assertTrue(playersGotUpdate(expectedUpdate, tuples))
+
+            self.assertEqual(players['A'].cardsInHand, [])
+            self.assertEqual(players['A'].cardsInPlay, [newGun] + [game.getCardByUid(uid) for uid in secondInPlayUid])
+            self.assertEqual(game.discardPile, [currentGun])
+            self.assertEqual(game.currentCard, None)
 
     # Choosing to keep an in-play gun instead of playing a new one.
+    def testInPlayNotReplacingGun(self):
+        for secondInPlayUid in [[], [67]]:
+            setDefaults()
+            setPlayerCardsInHand({'A': [75]})
+            setPlayerCardsInPlay({'A': [78] + secondInPlayUid})
+            currentGun = game.getCardByUid(78)
+
+            tuples = game.validateCardChoice('A', 75)
+            questionTuple = getQuestionTuple('A', tuples)
+            self.assertEqual(questionTuple[1]['question'], QUESTION_REPLACE_GUN)
+            
+            tuples = game.processQuestionResponse('A', QUESTION_REPLACE_GUN, KEEP_GUN)
+            self.assertEqual(tuples, [])
+
+            self.assertEqual(players['A'].cardsInHand, [game.getCardByUid(75)])
+            self.assertEqual(players['A'].cardsInPlay, [currentGun] + [game.getCardByUid(uid) for uid in secondInPlayUid])
+            self.assertEqual(game.discardPile, [])
+            self.assertEqual(game.currentCard, None)
 
 
 
 
-    ''' Game setup tests. '''
+    ''' End of turn tests. '''
 
-    # All characters assigned are unique.
+    # Over the card limit and discards enough at once.
+    def testDiscardingCardsOverLimit(self):
+        setDefaults()
+        setPlayerCardsInHand({'A': [1,2,3,4,5,6,7]})
 
-    # All players have the correct number of cards and lives to begin with.
+        tuples = game.startNextTurn('A')
+        self.assertTrue(playerGotInfo('A', "You need to discard 2 cards! Click on cards in your hand to discard them", tuples))
+        
+        tuples = game.playerDiscardingCard('A', 3)
+        self.assertEqual(getEmitTypes(tuples), {DISCARD_CLICK, UPDATE_DISCARD_PILE, UPDATE_ACTION, UPDATE_CARD_HAND})
+
+        tuples = game.playerDiscardingCard('A', 5)
+        self.assertEqual(getEmitTypes(tuples), {END_YOUR_TURN, UPDATE_DISCARD_PILE, UPDATE_ACTION, UPDATE_CARD_HAND})
+
+        self.assertEqual([c.uid for c in players['A'].cardsInHand], [1,2,4,6,7])
+        self.assertEqual(game.discardPile, [game.getCardByUid(3), game.getCardByUid(5)])
+
+    # Over the card limit but doesn't discard enough the first time.
+    def testDiscardingCardsOverLimitTwice(self):
+        setDefaults()
+        setPlayerCardsInHand({'A': [1,2,3,4,5,6,7]})
+
+        tuples = game.startNextTurn('A')
+        self.assertTrue(playerGotInfo('A', "You need to discard 2 cards! Click on cards in your hand to discard them", tuples))
+        
+        tuples = game.playerDiscardingCard('A', 3)
+        self.assertEqual(getEmitTypes(tuples), {DISCARD_CLICK, UPDATE_DISCARD_PILE, UPDATE_ACTION, UPDATE_CARD_HAND})
+
+        tuples = game.startNextTurn('A')
+        self.assertTrue(playerGotInfo('A', "You need to discard 1 card! Click on a card in your hand to discard it", tuples))
+
+        tuples = game.playerDiscardingCard('A', 5)
+        self.assertEqual(getEmitTypes(tuples), {END_YOUR_TURN, UPDATE_DISCARD_PILE, UPDATE_ACTION, UPDATE_CARD_HAND})
+
+        self.assertEqual([c.uid for c in players['A'].cardsInHand], [1,2,4,6,7])
+        self.assertEqual(game.discardPile, [game.getCardByUid(3), game.getCardByUid(5)])
+
+    # At/below the card limit, so nothing gets discarded.
+    def testNotDiscardingCardsAfterTurn(self):
+        for lastCardUid in [[], [5]]:
+            setDefaults()
+            setPlayerCardsInHand({'A': [1,2,3,4] + lastCardUid})
+
+            tuples = game.startNextTurn('A')
+            self.assertEqual(getEmitTypes(tuples), NEW_TURN_TUPLES)
+
+            self.assertEqual([c.uid for c in players['A'].cardsInHand], [1,2,3,4] + lastCardUid)
+            self.assertEqual(game.discardPile, [])
+
+    # New turn gets set up correctly for each player.
+    def testNewTurnSetup(self):
+        setDefaults()
+        expectedTurn = game.currentTurn + 1
+
+        game.startNextTurn('A')
+
+        self.assertEqual(game.playerOrder[0], players['B'])
+        self.assertEqual(game.playerOrder[-1], players['A'])
+        self.assertEqual(game.currentTurn, expectedTurn)
 
 
 
 
-    ''' Discarding cards to end the turn tests. '''
+    ''' Drawing cards to start the turn tests. '''
+    
+    # Drawing for dynamite and not taking damage.
+    def testDynamiteNoDamage(self):
+        setDefaults()
+        setPlayerSpecialCards({'B': [game.getDynamiteCard().uid]})
+        game.dynamiteUsername = 'B'
+        game.dynamiteStartTurn = 1
+        drawnCard = [c for c in game.allCards if c.suit != SPADE][0]
+        game.drawPile.append(drawnCard)
 
-    # Too many cards and discards enough at once.
+        tuples = game.startNextTurn('A')
+        self.assertTrue(playerGotInfo('B', "The dynamite didn't explode on you", tuples))
+        self.assertTrue(playerGotInfo('C', "The dynamite didn't explode on B, so you'll have it next turn", tuples))
+        self.assertTrue(playersGotUpdate("The dynamite didn't explode on B, so now C has it.", tuples))
 
-    # Too many cards but doesn't discard enough the first time.
+        self.assertEqual(players['B'].lives, 4)
+        self.assertEqual(players['B'].specialCards, [])
+        self.assertEqual(players['C'].specialCards, [game.getDynamiteCard()])
 
-    # Few enough cards and doesn't discard anything.
+        self.assertEqual(game.dynamiteUsername, 'C')
+        self.assertEqual(game.discardPile, [drawnCard])
+        self.assertNotEqual(game.drawPile[-1], drawnCard)
+        self.assertEqual(game.currentCard, None)
 
-    # Few enough cards but discards some anyway.
+    # Drawing for dynamite and taking damage.
+    def testDynamiteDamage(self):
+        setDefaults()
+        setPlayerSpecialCards({'B': [game.getDynamiteCard().uid]})
+        game.dynamiteUsername = 'B'
+        game.dynamiteStartTurn = 1
+        drawnCard = getExplosionCard()
+        game.drawPile.append(drawnCard)
 
+        tuples = game.startNextTurn('A')
+        self.assertTrue(playerGotInfo('B', "You were hit by the exploding dynamite, so you've lost 3 lives", tuples))
+        self.assertTrue(playersGotUpdate("B was hit by the exploding dynamite and lost 3 lives.", tuples))
+
+        self.assertEqual(players['B'].lives, 1)
+        self.assertEqual(players['B'].specialCards, [])
+        self.assertEqual(players['C'].specialCards, [])
+
+        self.assertEqual(game.dynamiteUsername, "")
+        self.assertEqual(game.discardPile, [drawnCard, game.getDynamiteCard()])
+        self.assertNotEqual(game.drawPile[-1], drawnCard)
+        self.assertEqual(game.currentCard, None)
+
+    # Drawing for dynamite and getting eliminated.
+    def testDynamiteElimination(self):
+        setDefaults()
+        setPlayerSpecialCards({'B': [game.getDynamiteCard().uid]})
+        setPlayerLives({'B': 2})
+        game.dynamiteUsername = 'B'
+        game.dynamiteStartTurn = 1
+        drawnCard = getExplosionCard()
+        game.drawPile.append(drawnCard)
+
+        tuples = game.startNextTurn('A')
+        self.assertTrue(playerGotInfo('B', "You were hit by the exploding dynamite!! You've been eliminated!", tuples))
+        for p in game.players.values():
+            if p != players['B']:
+                self.assertTrue(playerGotInfo(p.username, "B was hit by the exploding dynamite and has been eliminated! There are now 6 players left.", tuples))
+        self.assertTrue(playersGotUpdate("B was hit by the exploding dynamite and has been eliminated.", tuples))
+
+        self.assertEqual(players['B'].lives, 0)
+        self.assertEqual(players['B'].specialCards, [])
+
+        self.assertEqual(game.dynamiteUsername, "")
+        self.assertEqual(game.discardPile, [drawnCard, game.getDynamiteCard()])
+        self.assertNotEqual(game.drawPile[-1], drawnCard)
+        self.assertEqual(game.currentCard, None)
+
+    # Drawing for dynamite and surviving with 2 Birras.
+    def testDynamiteExplosionWithBirra(self):
+        setDefaults()
+        setPlayerCardsInHand({'B': [42, 43]})
+        setPlayerSpecialCards({'B': [game.getDynamiteCard().uid]})
+        setPlayerLives({'B': 2})
+        game.dynamiteUsername = 'B'
+        game.dynamiteStartTurn = 1
+        drawnCard = getExplosionCard()
+        game.drawPile.append(drawnCard)
+
+        tuples = game.startNextTurn('A')
+        self.assertTrue(playerGotInfo('B', "You were hit by the exploding dynamite and almost died, but were saved by 2 Birras", tuples))
+        self.assertFalse(playerGotInfo('C', "The dynamite didn't explode on B, so you'll have it next turn", tuples))
+        self.assertTrue(playersGotUpdate("B was hit by the exploding dynamite but stayed alive by playing 2 Birras.", tuples))
+        self.assertFalse((END_YOUR_TURN, dict(), players['B']) in tuples)
+
+        self.assertEqual(players['B'].lives, 1)
+        self.assertTrue(game.getCardByUid(42) not in players['B'].cardsInHand)
+        self.assertTrue(game.getCardByUid(43) not in players['B'].cardsInHand)
+        self.assertEqual(players['B'].specialCards, [])
+
+        self.assertEqual(game.dynamiteUsername, "")
+        self.assertEqual(game.discardPile, [drawnCard, game.getDynamiteCard(), game.getCardByUid(42), game.getCardByUid(43)])
+        self.assertEqual(game.currentCard, None)
+
+    # Drawing for jail and escaping.
+    def testPrigioneEscaping(self):
+        setDefaults()
+        setPlayerSpecialCards({'B': [69]})
+        players['B'].jailStatus = 1
+        expectedCardsDrawn = game.drawPile[-2:][::-1]
+        drawnCard = getCardsOfASuit(HEART, 1)[0]
+        game.drawPile.append(drawnCard)
+
+        tuples = game.startNextTurn('A')
+        self.assertTrue(playerGotInfo('B', "You drew a heart, so you got out of jail!", tuples))
+        self.assertTrue(playerGotInfo('B', "You drew {}".format(utils.convertCardsDrawnToString(expectedCardsDrawn)), tuples))
+        self.assertTrue(playersGotUpdate("B drew a heart, so they get to play this turn.", tuples))
+        self.assertFalse((END_YOUR_TURN, dict(), players['B']) in tuples)
+        self.assertTrue(playersGotUpdate(DREW_2_CARDS.format('B'), tuples))
+
+        self.assertEqual(players['B'].jailStatus, 0)
+        self.assertEqual(players['B'].cardsInHand, expectedCardsDrawn)
+        self.assertEqual(players['B'].specialCards, [])
+        self.assertEqual(game.playerOrder[0], players['B'])
+
+        self.assertEqual(game.discardPile, [drawnCard, game.getCardByUid(69)])
+        self.assertEqual(game.currentCard, None)
+
+    # Drawing for jail and getting skipped.
+    def testPrigioneNotEscaping(self):
+        setDefaults()
+        setPlayerSpecialCards({'B': [69]})
+        players['B'].jailStatus = 1
+        drawnCard = getCardsOfASuit(DIAMOND, 1)[0]
+        game.drawPile.append(drawnCard)
+
+        tuples = game.startNextTurn('A')
+        self.assertTrue(playerGotInfo('B', "You drew a {}, so you're stuck in jail for this turn".format(drawnCard.suit), tuples))
+        self.assertTrue(playersGotUpdate("B drew a {}, so they're stuck in jail for this turn.".format(drawnCard.suit), tuples))
+        self.assertTrue((END_YOUR_TURN, dict(), players['B']) in tuples)
+
+        self.assertEqual(players['B'].jailStatus, 1)
+        self.assertEqual(players['B'].specialCards, [])
+
+        self.assertEqual(game.discardPile, [drawnCard, game.getCardByUid(69)])
+        self.assertEqual(game.currentCard, None)
+
+    # Drawing for both special cards: no explosion and escaping.
+    def testDynamiteNotExplodingAndJailEscaping(self):
+        setDefaults()
+        setPlayerSpecialCards({'B': [game.getDynamiteCard().uid, 69]})
+        game.dynamiteUsername = 'B'
+        game.dynamiteStartTurn = 1
+        players['B'].jailStatus = 1
+        expectedCardsDrawn = game.drawPile[-2:][::-1]
+        drawnCards = getCardsOfASuit(HEART, 2)
+        game.drawPile.extend(drawnCards)
+
+        tuples = game.startNextTurn('A')
+        self.assertTrue(playerGotInfo('B', "The dynamite didn't explode on you", tuples))
+        self.assertTrue(playerGotInfo('B', "You drew a heart, so you got out of jail", tuples))
+        self.assertTrue(playerGotInfo('B', "You drew {}".format(utils.convertCardsDrawnToString(expectedCardsDrawn)), tuples))
+        self.assertTrue(playerGotInfo('C', "The dynamite didn't explode on B, so you'll have it next turn", tuples))
+        self.assertTrue(playersGotUpdate("The dynamite didn't explode on B, so now C has it.", tuples))
+        self.assertTrue(playersGotUpdate("B drew a heart, so they get to play this turn.", tuples))
+        self.assertFalse((END_YOUR_TURN, dict(), players['B']) in tuples)
+        self.assertTrue(playersGotUpdate(DREW_2_CARDS.format('B'), tuples))
+
+        self.assertEqual(players['B'].lives, 4)
+        self.assertEqual(players['B'].cardsInHand, expectedCardsDrawn)
+        self.assertEqual(players['B'].specialCards, [])
+        self.assertEqual(players['C'].specialCards, [game.getDynamiteCard()])
+
+        self.assertEqual(game.dynamiteUsername, 'C')
+        self.assertEqual(game.discardPile, [drawnCards[1], drawnCards[0], game.getCardByUid(69)])
+        self.assertEqual(game.currentCard, None)
+
+    # Drawing for both special cards: no explosion and getting skipped.
+    def testDynamiteNotExplodingAndJailNotEscaping(self):
+        setDefaults()
+        setPlayerSpecialCards({'B': [game.getDynamiteCard().uid, 69]})
+        game.dynamiteUsername = 'B'
+        game.dynamiteStartTurn = 1
+        players['B'].jailStatus = 1
+        drawnCards = getCardsOfASuit(CLUB, 1) + getCardsOfASuit(HEART, 1)
+        game.drawPile.extend(drawnCards)
+
+        tuples = game.startNextTurn('A')
+        self.assertTrue(playerGotInfo('B', "The dynamite didn't explode on you", tuples))
+        self.assertTrue(playerGotInfo('B', "You drew a {}, so you're stuck in jail for this turn".format(drawnCards[0].suit), tuples))
+        self.assertTrue(playerGotInfo('C', "The dynamite didn't explode on B, so you'll have it next turn", tuples))
+        self.assertTrue(playersGotUpdate("The dynamite didn't explode on B, so now C has it.", tuples))
+        self.assertTrue(playersGotUpdate("B drew a {}, so they're stuck in jail for this turn.".format(drawnCards[0].suit), tuples))
+        self.assertTrue((END_YOUR_TURN, dict(), players['B']) in tuples)
+
+        self.assertEqual(players['B'].lives, 4)
+        self.assertEqual(players['B'].specialCards, [])
+        self.assertEqual(players['C'].specialCards, [game.getDynamiteCard()])
+
+        self.assertEqual(game.dynamiteUsername, 'C')
+        self.assertEqual(game.discardPile, [drawnCards[1], drawnCards[0], game.getCardByUid(69)])
+        self.assertEqual(game.currentCard, None)
+
+    # Drawing for both special cards: explosion and getting skipped.
+    def testDynamiteExplodingAndJailNotEscaping(self):
+        setDefaults()
+        setPlayerSpecialCards({'B': [game.getDynamiteCard().uid, 69]})
+        game.dynamiteUsername = 'B'
+        game.dynamiteStartTurn = 1
+        players['B'].jailStatus = 1
+        drawnCards = getCardsOfASuit(SPADE, 1) + [getExplosionCard()]
+        game.drawPile.extend(drawnCards)
+
+        tuples = game.startNextTurn('A')
+        self.assertTrue(playerGotInfo('B', "You were hit by the exploding dynamite, so you've lost 3 lives! You're down to 1 now.", tuples))
+        self.assertTrue(playerGotInfo('B', "You drew a {}, so you're stuck in jail for this turn".format(drawnCards[0].suit), tuples))
+        self.assertFalse(playerGotInfo('C', "The dynamite didn't explode on B, so you'll have it next turn", tuples))
+        self.assertTrue(playersGotUpdate("B was hit by the exploding dynamite and lost 3 lives.", tuples))
+        self.assertTrue(playersGotUpdate("B drew a {}, so they're stuck in jail for this turn.".format(drawnCards[0].suit), tuples))
+        self.assertTrue((END_YOUR_TURN, dict(), players['B']) in tuples)
+
+        self.assertEqual(players['B'].lives, 1)
+        self.assertEqual(players['B'].specialCards, [])
+        self.assertEqual(players['C'].specialCards, [])
+
+        self.assertEqual(game.dynamiteUsername, "")
+        self.assertEqual(game.discardPile, [drawnCards[1], game.getDynamiteCard(), drawnCards[0], game.getCardByUid(69)])
+        self.assertEqual(game.currentCard, None)
+
+    # Drawing for both special cards: explosion and escaping.
+    def testDynamiteExplodingAndJailEscaping(self):
+        setDefaults()
+        setPlayerSpecialCards({'B': [game.getDynamiteCard().uid, 69]})
+        game.dynamiteUsername = 'B'
+        game.dynamiteStartTurn = 1
+        players['B'].jailStatus = 1
+        expectedCardsDrawn = game.drawPile[-2:][::-1]
+        drawnCards = getCardsOfASuit(HEART, 1) + [getExplosionCard()]
+        game.drawPile.extend(drawnCards)
+
+        tuples = game.startNextTurn('A')
+        self.assertTrue(playerGotInfo('B', "You were hit by the exploding dynamite, so you've lost 3 lives! You're down to 1 now.", tuples))
+        self.assertTrue(playerGotInfo('B', "You drew a heart, so you got out of jail", tuples))
+        self.assertFalse(playerGotInfo('C', "The dynamite didn't explode on B, so you'll have it next turn", tuples))
+        self.assertTrue(playersGotUpdate("B was hit by the exploding dynamite and lost 3 lives.", tuples))
+        self.assertTrue(playersGotUpdate("B drew a heart, so they get to play this turn.", tuples))
+        self.assertFalse((END_YOUR_TURN, dict(), players['B']) in tuples)
+        self.assertTrue(playersGotUpdate(DREW_2_CARDS.format('B'), tuples))
+
+        self.assertEqual(players['B'].lives, 1)
+        self.assertEqual(players['B'].cardsInHand, expectedCardsDrawn)
+        self.assertEqual(players['B'].specialCards, [])
+        self.assertEqual(players['C'].specialCards, [])
+
+        self.assertEqual(game.dynamiteUsername, "")
+        self.assertEqual(game.discardPile, [drawnCards[1], game.getDynamiteCard(), drawnCards[0], game.getCardByUid(69)])
+        self.assertEqual(game.currentCard, None)
+
+    # Drawing for both special cards: explosion, staying alive with a Birra, and still drawing for Prigione.
+    def testDynamiteWithBirraAndJail(self):
+        setDefaults()
+        setPlayerCardsInHand({'B': [42]})
+        setPlayerSpecialCards({'B': [game.getDynamiteCard().uid, 69]})
+        setPlayerLives({'B': 3})
+        game.dynamiteUsername = 'B'
+        game.dynamiteStartTurn = 1
+        players['B'].jailStatus = 1
+        drawnCards = getCardsOfASuit(SPADE, 1) + [getExplosionCard()]
+        game.drawPile.extend(drawnCards)
+
+        tuples = game.startNextTurn('A')
+        self.assertTrue(playerGotInfo('B', "You were hit by the exploding dynamite and almost died, but were saved by a Birra", tuples))
+        self.assertTrue(playerGotInfo('B', "You drew a {}, so you're stuck in jail for this turn".format(drawnCards[0].suit), tuples))
+        self.assertFalse(playerGotInfo('C', "The dynamite didn't explode on B, so you'll have it next turn", tuples))
+        self.assertTrue(playersGotUpdate("B was hit by the exploding dynamite but stayed alive by playing a Birra.", tuples))
+        self.assertTrue(playersGotUpdate("B drew a {}, so they're stuck in jail for this turn.".format(drawnCards[0].suit), tuples))
+        self.assertTrue((END_YOUR_TURN, dict(), players['B']) in tuples)
+
+        self.assertEqual(players['B'].lives, 1)
+        self.assertEqual(players['B'].cardsInHand, [])
+        self.assertEqual(players['B'].specialCards, [])
+        self.assertEqual(players['C'].specialCards, [])
+
+        self.assertEqual(game.dynamiteUsername, "")
+        self.assertEqual(game.discardPile, [drawnCards[1], game.getDynamiteCard(), game.getCardByUid(42), drawnCards[0], game.getCardByUid(69)])
+        self.assertEqual(game.currentCard, None)
+
+    # Having both special cards: eliminated by explosion and not drawing for jail at all.
+    def testDynamiteEliminationAndJail(self):
+        setDefaults()
+        setPlayerSpecialCards({'B': [game.getDynamiteCard().uid, 69]})
+        setPlayerLives({'B': 3})
+        game.dynamiteUsername = 'B'
+        game.dynamiteStartTurn = 1
+        players['B'].jailStatus = 1
+        drawnCards = getCardsOfASuit(SPADE, 1) + [getExplosionCard()]
+        game.drawPile.extend(drawnCards)
+
+        tuples = game.startNextTurn('A')
+        self.assertEqual(countEmitTypeToRecipient(tuples, SHOW_INFO_MODAL, players['B']), 1)
+        self.assertTrue(playerGotInfo('B', "You've been eliminated", tuples))
+        self.assertTrue(playersGotUpdate("B was hit by the exploding dynamite and has been eliminated.".format(drawnCards[0].suit), tuples))
+        self.assertTrue((END_YOUR_TURN, dict(), players['B']) in tuples)
+
+        self.assertEqual(players['B'].lives, 0)
+        self.assertEqual(players['B'].specialCards, [])
+
+        self.assertEqual(game.dynamiteUsername, "")
+        self.assertEqual(game.discardPile, [drawnCards[1], game.getDynamiteCard(), game.getCardByUid(69)])
+        self.assertEqual(game.drawPile[-1], drawnCards[0])
+        self.assertEqual(game.currentCard, None)
 
 
 
 
     ''' Players getting eliminated tests. '''
 
-    # Rotating player order skips a player who was just eliminated.
+    # Player eliminated by a regular 1-point card.
+    def testPlayerEliminated(self):
+        setDefaults()
+        setPlayerLives({'B': 1})
+        setPlayerCardsInHand({'A': [1]})
+
+        game.validateCardChoice('A', 1)
+
+        tuples = game.processQuestionResponse('A', QUESTION_WHO_TO_SHOOT, 'B')
+        self.assertEqual(getEmitTypes(tuples), NEW_TURN_TUPLES)
+        self.assertTrue(playerGotInfo('B', "You were hit by the Bang!! You've been eliminated! Better luck next time", tuples))
+        for player in players.values():
+            if player.username != 'B':
+                self.assertTrue(playerGotInfo(player.username, "B was hit by the Bang and has been eliminated! There are now 6 players left.", tuples))
+        self.assertTrue(playersGotUpdate("B was hit by the Bang and has been eliminated.", tuples))
+
+        self.assertFalse(players['B'].isAlive())
+        self.assertEqual(players['B'].lives, 0)
+
+        self.assertEqual(getUsernameSet(game.getAlivePlayers()), {'A', 'C', 'D', 'E', 'F', 'G'})
+        self.assertEqual(game.currentCard, None)
+
+    # Rotating player order skips eliminated players, including a player who was just eliminated.
+    def testPlayerRotationWithEliminations(self):
+        setDefaults()
+        setPlayerLives({'B': 0, 'C': 0, 'D': 1})
+        setPlayerCardsInHand({'A': [1]})
+        setPlayerCardsInPlay({'A': [80]})
+
+        game.validateCardChoice('A', 1)
+
+        game.processQuestionResponse('A', QUESTION_WHO_TO_SHOOT, 'D')
+
+        tuples = game.startNextTurn('A')
+        for player in players.values():
+            if player != players['E']:
+                self.assertTrue(playerGotInfo(player.username, "It's now E's turn.", tuples))
+
+        self.assertEqual(game.playerOrder[0], players['E'])
+        self.assertEqual(getUsernameSet(game.getAlivePlayers()), {'A', 'E', 'F', 'G'})
 
     # Valid targets properly account for eliminated players.
+    def testValidTargetsWithEliminatedPlayers(self):
+        setDefaults()
+        setPlayerLives({'B': 0, 'C': 0, 'F': 0})
+
+        targets = game.getAllValidTargetsForCard(players['A'], PRIGIONE)
+        self.assertEqual(getUsernameSet(targets), {'D', 'E', 'G'})
 
     # Eliminated player's cards go to the discard pile.
+    def testEliminatedPlayerDiscardingCards(self):
+        setDefaults()
+        setPlayerLives({'B': 1})
+        cardsInHandUids = [2, 40, 55, 70]
+        cardsInPlayUids = [79, 67]
+        setPlayerCardsInHand({'A': [1], 'B': cardsInHandUids})
+        setPlayerCardsInPlay({'A': [66], 'B': cardsInPlayUids})
+        setPlayerSpecialCards({'B': [69, game.getDynamiteCard().uid]})
 
-    # Whoever eliminates an Outlaw takes their cards.
+        game.validateCardChoice('A', 1)
 
-    # When an Outlaw loses via their own Duello, their cards just go to the discard.
+        game.processQuestionResponse('A', QUESTION_WHO_TO_SHOOT, 'B')
+
+        self.assertEqual({c.uid for c in game.discardPile}, set(cardsInHandUids + cardsInPlayUids + [1, 69, game.getDynamiteCard().uid]))
+        self.assertEqual(game.currentCard, None)
+
+    # Whoever eliminates an Outlaw draws 3 cards.
+    def testEliminatingOutlawReward(self):
+        setDefaults()
+        setPlayerLives({'B': 1})
+        setPlayerCardsInHand({'A': [1]})
+        expectedCardsDrawn = game.drawPile[-3:][::-1]
+
+        players['B'].role = OUTLAW
+        game.validateCardChoice('A', 1)
+
+        tuples = game.processQuestionResponse('A', QUESTION_WHO_TO_SHOOT, 'B')
+        self.assertEqual(countEmitTypeToRecipient(tuples, UPDATE_CARD_HAND, players['A']), 2)
+        self.assertTrue(playerGotInfo('A', "You eliminated an Outlaw, so you drew 3 cards!", tuples))
+        self.assertTrue(playersGotUpdate("A eliminated an Outlaw, so they drew 3 cards.", tuples))
+
+        self.assertEqual(players['A'].cardsInHand, expectedCardsDrawn)
+
+    # When an Outlaw loses in a Duello s/he started himself/herself, the other player shouldn't draw anything.
+    def testOutlawEliminationNoRewardInDuello(self):
+        setDefaults()
+        setPlayerLives({'A': 1})
+        setPlayerCardsInHand({'A': [55], 'B': [1]})
+        players['A'].role = OUTLAW
+        game.sheriffUsername = 'F'
+        players['F'].role = SHERIFF
+
+        game.validateCardChoice('A', 55)
+
+        game.processQuestionResponse('A', QUESTION_WHO_TO_DUEL, 'B')
+
+        game.processQuestionResponse('B', QUESTION_DUELLO_REACTION.format('A'), PLAY_A_BANG)
+
+        self.assertEqual(players['B'].cardsInHand, [])
 
     # When the Sheriff eliminates a Vice, he loses all his cards.
+    def testSheriffEliminatingVice(self):
+        setDefaults()
+        setPlayerLives({'E': 1})
+        cardsInHandUids = [1,10,20,30,40]
+        cardsInPlayUids = [66, 80]
+        setPlayerCardsInHand({'A': cardsInHandUids})
+        setPlayerCardsInPlay({'A': cardsInPlayUids})
 
-    # If Vulture Sam is Sheriff and eliminates a Vice, he gains the Vice's cards before losing all of his own.
+        game.validateCardChoice('A', 1)
+
+        tuples = game.processQuestionResponse('A', QUESTION_WHO_TO_SHOOT, 'E')
+        self.assertTrue(playerGotInfo('A', "You eliminated one of your Vices, so you have to discard all your cards", tuples))
+        self.assertTrue(playersGotUpdate("A is the Sheriff and eliminated a Vice, so they have to discard all their cards.", tuples))
+
+        self.assertEqual(players['A'].cardsInHand, [])
+        self.assertEqual(players['A'].cardsInPlay, [])
+        self.assertTrue(all([game.getCardByUid(uid) in game.discardPile for uid in cardsInHandUids]))
+        self.assertTrue(all([game.getCardByUid(uid) in game.discardPile for uid in cardsInPlayUids]))
+
+    # If Vulture Sam is Sheriff and eliminates a Vice, both of their cards should be in the discard pile, not held by Vulture Sam.
+    def testVultureSamSheriffAndVice(self):
+        setDefaults()
+        setPlayerLives({'E': 1})
+        setPlayerCardsInHand({'A': [1], 'E': [10,20,40,50]})
+        setPlayerCardsInPlay({'A': [80], 'E': [66]})
+        setPlayerCharacter('A', VULTURE_SAM)
+
+        game.validateCardChoice('A', 1)
+
+        tuples = game.processQuestionResponse('A', QUESTION_WHO_TO_SHOOT, 'E')
+        self.assertTrue(playerGotInfo('A', "You eliminated one of your Vices, so you have to discard all your cards", tuples))
+        self.assertFalse(playerGotInfo('A', "You got all of E's cards because they were eliminated", tuples))
+        self.assertTrue(playersGotUpdate("A is the Sheriff and eliminated a Vice, so they have to discard all their cards.", tuples))
+
+        self.assertEqual(players['A'].cardsInHand, [])
+        self.assertEqual(players['A'].cardsInPlay, [])
+        self.assertEqual(players['A'].cardsInHand, [])
+        self.assertEqual(players['E'].cardsInPlay, [])
+        self.assertEqual(players['E'].cardsInPlay, [])
+        self.assertEqual(players['E'].cardsInHand, [])
+
 
 
 
     ''' Game ending scenario tests. '''
 
-    # Sheriff vs. outlaw, sheriff. vs renegade, etc.
+    # Sheriff dies and outlaws win.
+    def testOutlawsWinning(self):
+        setDefaults()
+        setPlayerLives({'A': 1, 'F': 0, 'G': 0})
+        setPlayerCardsInHand({'A': [55], 'B': [1]})
+        expectedResult = "The Outlaws have won the game!"
+
+        game.validateCardChoice('A', 55)
+
+        game.processQuestionResponse('A', QUESTION_WHO_TO_DUEL, 'B')
+
+        tuples = game.processQuestionResponse('B', QUESTION_DUELLO_REACTION.format('A'), PLAY_A_BANG)
+        self.assertEqual(game.isGameOver(), expectedResult)
+        self.assertTrue(any([expectedResult in t[1]['html'] for t in tuples if t[0] == SHOW_INFO_MODAL]))
+
+    # Sheriff dies and the renegade wins.
+    def testRenegadeWinning(self):
+        setDefaults()
+        setPlayerLives({'A': 1, 'C': 0, 'D': 0, 'E': 0, 'F': 0, 'G': 0})
+        setPlayerCardsInHand({'A': [55], 'B': [1]})
+        expectedResult = "The Renegade has won the game!"
+
+        game.validateCardChoice('A', 55)
+
+        game.processQuestionResponse('A', QUESTION_WHO_TO_DUEL, 'B')
+
+        tuples = game.processQuestionResponse('B', QUESTION_DUELLO_REACTION.format('A'), PLAY_A_BANG)
+        self.assertEqual(game.isGameOver(), expectedResult)
+        self.assertTrue(any([expectedResult in t[1]['html'] for t in tuples if t[0] == SHOW_INFO_MODAL]))
+
+    # Sheriff/vices win.
+    def testSheriffVicesWinning(self):
+        setDefaults()
+        setPlayerLives({'B': 0, 'C': 1, 'D': 0, 'F': 0, 'G': 0})
+        setPlayerCardsInHand({'A': [1]})
+        expectedResult = "The Sheriff and his Vices have won the game!"
+
+        game.validateCardChoice('A', 1)
+
+        tuples = game.processQuestionResponse('A', QUESTION_WHO_TO_SHOOT, 'C')
+        self.assertEqual(game.isGameOver(), expectedResult)
+        self.assertTrue(any([expectedResult in t[1]['html'] for t in tuples if t[0] == SHOW_INFO_MODAL]))
 
 
 
 
     ''' Miscellaneous tests. '''
 
-    # Drawing 2 cards from a draw pile with 1 card left.
+    # All character options are unique and roles are distributed correctly.
+    def testRolesAndCharacterOptions(self):
+        setDefaults()
+        game.prepareForSetup()
+        
+        self.assertEqual(len(game.remainingCharacters), 16)
+
+        for username in players:
+            game.assignNewPlayer(username)
+
+        self.assertEqual(len([p for p in players.values() if p.role == SHERIFF]), 1)
+        self.assertEqual(len([p for p in players.values() if p.role == VICE]), 2)
+        self.assertEqual(len([p for p in players.values() if p.role == OUTLAW]), 3)
+        self.assertEqual(len([p for p in players.values() if p.role == RENEGADE]), 1)
+
+        for p1 in players.values():
+            for p2 in players.values():
+                if p1 != p2:
+                    self.assertEqual({character.name for character in p1.characterOptions} & {character.name for character in p2.characterOptions}, set())
+
+    # All players have the correct number of cards and lives to begin with.
+    def testPlayerStartingLivesAndCards(self):
+        setDefaults()
+        game.sheriffUsername = ''
+        game.prepareForSetup()
+        
+        self.assertEqual(len(game.remainingCharacters), 16)
+
+        for username in players:
+            game.assignNewPlayer(username)
+            game.assignCharacter(username, players[username].characterOptions[0].name) # Just use the first character option.
+
+        for player in players.values():
+            expected = (player.character.numLives + 1) if player.role == SHERIFF else player.character.numLives
+            self.assertEqual(player.lives, expected)
+            self.assertEqual(len(player.cardsInHand), expected)
+
+    # The deck gets reshuffled after the last card is drawn.
+    def testDeckReshuffle(self):
+        setDefaults()
+        initialOrder = list(game.drawPile)
+
+        for card in game.drawPile[1:]:
+            game.discardPile.append(game.drawOneCard())
+
+        self.assertEqual(len(game.discardPile), 79)
+        self.assertEqual(len(game.drawPile), 1)
+
+        game.discardPile.append(game.drawOneCard())
+
+        self.assertEqual(len(game.discardPile), 0)
+        self.assertEqual(len(game.drawPile), 80)
+        self.assertNotEqual(initialOrder, game.drawPile)
+
+    # Tuples get consolidated correctly.
+    def testTupleConsolidation(self):
+        consolidatedTuples = utils.consolidateTuples([
+            (SLEEP, 1, None),
+            (SHOW_WAITING_MODAL, "Waiting for B", players['A']),
+            (SLEEP, 1, None),
+            (UPDATE_CARD_HAND, "oldhand", players['A']),
+            (SLEEP, 1, None),
+            (SHOW_INFO_MODAL, {'html': "duplicate"}, players['A']),
+            (SHOW_INFO_MODAL, {'html': "duplicate"}, players['A']),
+            (UPDATE_CARD_HAND, "newhand", players['A']),
+            (SHOW_WAITING_MODAL, "Waiting for C", players['A']),
+            (SLEEP, 1, None)
+        ])
+
+        expectedConsolidatedTuples = [
+            (SLEEP, 1, None),
+            (SHOW_INFO_MODAL, {'html': "duplicate"}, players['A']),
+            (UPDATE_CARD_HAND, "newhand", players['A']),
+            (SLEEP, 1, None),
+            utils.createWaitingModalTuple(players['A'], "Waiting for 2 players...")
+        ]
+
+        self.assertEqual(consolidatedTuples, expectedConsolidatedTuples)
 
 
 if __name__ == '__main__':

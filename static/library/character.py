@@ -1,7 +1,7 @@
 class Character(dict):
-	def __init__(self, name, num_lives, ability):
+	def __init__(self, name, numLives, ability):
 		self.name = name
-		self.num_lives = num_lives
+		self.numLives = numLives
 		self.ability = ability
 
 		dict.__init__(self)

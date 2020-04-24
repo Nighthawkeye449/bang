@@ -74,7 +74,7 @@ QUESTION_CARD_ON_TABLE = "Which one of {}'s cards on the table do you choose for
 QUESTION_IN_PLAY = "You already have 2 cards in play! What do you want to do?"
 QUESTION_REPLACE_GUN = "You already have a gun in play! What do you want to do?"
 QUESTION_CARD_IN_PLAY = "Which of your 2 cards in play do you want to replace?"
-QUESTION_BARILE_MANCATO = "You didn't draw a heart for Barile against {}'s Bang, so you still need a Mancato. How do you want to react?"
+QUESTION_BARILE_MANCATO = "You didn't draw a heart for Barile against {}'s {}, so you still need a Mancato. How do you want to react?"
 QUESTION_SLAB_BARILE_ONE = "You drew a heart for Barile against {}'s Bang, but you still need one Mancato. How do you want to react?"
 QUESTION_SLAB_BARILE_TWO = "You didn't draw a heart for Barile against {}'s Bang, so you still need two Mancatos. How do you want to react?"
 
@@ -89,7 +89,6 @@ PLAY_A_MANCATO = "Play a Mancato."
 PLAY_TWO_MANCATOS = "Play 2 Mancatos."
 LOSE_A_LIFE = "Lose a life."
 KEEP_CURRENT_CARDS = "Keep my current cards."
-REPLACE_A_CARD = "Replace one of my cards."
 KEEP_GUN = "Keep my {}."
 REPLACE_GUN = "Discard my {} and play the {}."
 

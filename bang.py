@@ -139,6 +139,8 @@ def startGame():
 @socketio.on(SET_CHARACTER)
 def setCharacter(username, character):
 	utils.logServer("Received socket message '{}' from {}: {}.".format(SET_CHARACTER, username, character))
+	tuples = []
+
 	with lock:
 		game['gp'].assignCharacter(username, character)
 		unassigned_players_remaining = [u for u in game['gp'].players if game['gp'].players[u].character == None]
@@ -148,8 +150,11 @@ def setCharacter(username, character):
 
 		else:
 			# Start the game for the players by loading their main play screens and info modals.
-			emitTuples(game['gp'].finalizeSetup())
-				
+			tuples = game['gp'].finalizeSetup()
+
+	if tuples:
+		playPageTuples = [(RELOAD_PLAY_PAGE, {'html': game['gp'].renderPlayPageForPlayer(p.username)}, p) for p in game['gp'].players.values()]
+		emitTuples(playPageTuples + tuples)
 
 @socketio.on(CARD_WAS_DISCARDED)
 def cardWasDiscarded(username, uid):
@@ -179,14 +184,14 @@ def cardWasPlayed(username, uid):
 
 @socketio.on(INFO_MODAL_UNDEFINED)
 def waitForInfoModal(username, html):
-	utils.logServer("Info modal load failed for {}. Waiting 1/10 of a second and trying again.".format(username))
-	time.sleep(0.1)
+	utils.logServer("Info modal load failed for {}. Waiting 1/100 of a second and trying again.".format(username))
+	time.sleep(0.01)
 	emit(SHOW_INFO_MODAL, {'html': html}, recipient=game['gp'].players[username])
 
 @socketio.on(QUESTION_MODAL_UNDEFINED)
 def waitForQuestionModal(username, option1, option2, option3, option4, option5, option6, html, question):
-	utils.logServer("Question modal load failed for {}. Waiting 1/10 of a second and trying again.".format(username))
-	time.sleep(0.1)
+	utils.logServer("Question modal load failed for {}. Waiting 1/100 of a second and trying again.".format(username))
+	time.sleep(0.01)
 	emit(SHOW_QUESTION_MODAL, {'option1': option1, 'option2': option2, 'option3': option3, 'option4': option4, 'option5': option5, 'option6': option6, 'html': html, 'question': question}, recipient=game['gp'].players[username])
 
 @socketio.on(QUESTION_MODAL_ANSWERED)
@@ -266,10 +271,9 @@ def homePage():
 @app.route("/setup", methods = ['POST', 'GET'])
 def setup():
 	username = request.json['username']
-	player = game['gp'].players[username]
 
 	with lock:
-		game['gp'].assignNewPlayer(player)
+		game['gp'].assignNewPlayer(username)
 
 	# Wait until the Sheriff has been assigned so that his/her name can be rendered too.
 	while True:
@@ -279,16 +283,10 @@ def setup():
 				utils.logServer("Sheriff has been assigned. Rendering setup page for {}.".format(username))
 				return render_template('setup.html',
 					role=game['gp'].players[username].role,
-					option1=player.characterOptions[0],
-					option2=player.characterOptions[1],
+					option1=game['gp'].players[username].characterOptions[0],
+					option2=game['gp'].players[username].characterOptions[1],
 					sheriff=game['gp'].sheriffUsername if game['gp'].sheriffUsername != username else None,
 					numOtherPlayers=len(game['gp'].players) - 1)
-
-@app.route("/play", methods = ['POST', 'GET'])
-def play():
-	username = request.json['username']
-	utils.logServer("Rendering play page for {}.".format(username))
-	return game['gp'].renderPlayPageForUsername(username)
 
 #################### App route for POST calls that query information instead of rendering full pages ####################
 

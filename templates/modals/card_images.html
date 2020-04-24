@@ -1,3 +1,5 @@
-{% for card in cards %}
-	<img onclick="{{'' if not clickable else 'pickEmporioCard(\'' + card.uid|string + '\')' }}" class="game_card zoom_hover_2" src="{{ url_for('static', filename='/images/cards/actions/' + card.uid|string + '.jpg') }}">
-{% endfor %}
+<div id="infoModalImages">
+	{% for card in cards %}
+		<img onclick="{{'' if not clickable else 'pickEmporioCard(\'' + card.uid|string + '\')' }}" class="game_card zoom_hover_2" src="{{ url_for('static', filename='/images/cards/actions/' + card.uid|string + '.jpg') }}">
+	{% endfor %}
+</div>

@@ -93,7 +93,7 @@ class PlayerGame(dict):
 
 	def getGunRange(self):
 		# Assuming only 1 gun is allowed in play at a time.
-		gun = utils.getObjectFromList(lambda card: card.cardtype == GUN_CARD, self.cardsInPlay)
+		gun = utils.getUniqueItem(lambda card: card.cardtype == GUN_CARD, self.cardsInPlay)
 		
 		if gun == None:
 			utils.logPlayer("{} has no gun, so range is 1.".format(self.username))
@@ -136,3 +136,6 @@ class PlayerGame(dict):
 
 	def getLogString(self):
 		return "{} ({})".format(self.character.name, self.username)
+
+	def getPrigione(self):
+		return utils.getUniqueItem(lambda c: c.name == PRIGIONE, self.specialCards) # Will return None if the player isn't in jail.

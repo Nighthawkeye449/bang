@@ -1,82 +1,82 @@
 {
   "Bart Cassidy": {
     "name": "Bart Cassidy",
-    "num_lives": 4,
+    "numLives": 4,
     "ability": "Each time he loses a life point, he immediately draws a card from the deck."
   },
   "Black Jack": {
     "name": "Black Jack",
-    "num_lives": 4,
+    "numLives": 4,
     "ability": "When drawing to start his turn, he must show the second card he draws. If it's a Heart or Diamond, he draws one additional card (without revealing it)."
   },
   "Calamity Janet": {
     "name": "Calamity Janet",
-    "num_lives": 4,
+    "numLives": 4,
     "ability": "She can use BANG! cards as Missed! cards and vice versa."
   },
   "El Gringo": {
     "name": "El Gringo",
-    "num_lives": 3,
+    "numLives": 3,
     "ability": "Each time he loses a life point due to a card played by another player, he draws a random card from the hand of that player (one card for each life point)."
   },
   "Jesse Jones": {
     "name": "Jesse Jones",
-    "num_lives": 4,
+    "numLives": 4,
     "ability": "When drawing to start his turn, he may choose to draw the first card randomly from the hand of another player instead of from the deck."
   },
   "Jourdonnais": {
     "name": "Jourdonnais",
-    "num_lives": 4,
+    "numLives": 4,
     "ability": "He is considered to have a Barrel in play at all times. If he has another real Barrel card in play, he can count both of them."
   },
   "Kit Carlson": {
     "name": "Kit Carlson",
-    "num_lives": 4,
+    "numLives": 4,
     "ability": "When drawing to start his turn, he looks at the top 3 cards of the deck, choosing 2 and placing the third back on top of the deck face-down."
   },
   "Lucky Duke": {
     "name": "Lucky Duke",
-    "num_lives": 4,
+    "numLives": 4,
     "ability": "Each time he's required to 'draw!', he flips the top 2 cards from the deck and chooses the one he prefers. He discards both afterwards."
   },
   "Paul Regret": {
     "name": "Paul Regret",
-    "num_lives": 3,
+    "numLives": 3,
     "ability": "He is considered to have a Mustang in play at all times. If he has another real Mustang card in play, he can count both of them."
   },
   "Pedro Ramirez": {
     "name": "Pedro Ramirez",
-    "num_lives": 4,
+    "numLives": 4,
     "ability": "When drawing to start his turn, he may choose to draw his first card from the top of the discard pile instead of the deck."
   },
   "Rose Doolan": {
     "name": "Rose Doolan",
-    "num_lives": 4,
+    "numLives": 4,
     "ability": "She is considered to have a Scope in play at all times. If she has another real Scope card in play, she can count both of them."
   },
   "Sid Ketchum": {
     "name": "Sid Ketchum",
-    "num_lives": 4,
+    "numLives": 4,
     "ability": "At any time, he may discard 2 cards from his hand to regain one life point. He can use this ability more than once at a time if he chooses."
   },
   "Slab The Killer": {
     "name": "Slab The Killer",
-    "num_lives": 4,
+    "numLives": 4,
     "ability": "Players trying to cancel his BANG! cards need 2 Missed! cards to do so. Barrel, if successfully used, only counts as one."
   },
   "Suzy Lafayette": {
     "name": "Suzy Lafayette",
-    "num_lives": 4,
+    "numLives": 4,
     "ability": "As soon as she has no cards in her hand, she draws a card from the draw pile."
   },
   "Vulture Sam": {
     "name": "Vulture Sam",
-    "num_lives": 4,
+    "numLives": 4,
     "ability": "Whenever a character is eliminated, Sam takes all the cards that that player had in his hand and in play, and adds them to his own hand."
   },
   "Willy The Kid": {
     "name": "Willy The Kid",
-    "num_lives": 4,
+    "numLives": 4,
     "ability": "He can play any number of BANG! cards during his turn."
   }
 }

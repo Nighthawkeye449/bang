@@ -253,14 +253,21 @@ function showInfoModal(html) {
 	// If an info message arrives once the waiting modal is already open, the blurs on the play screen need to be removed here.
 	removeBlurFromFullScreen();
 
-	// If the modal is already open and standard, and the new modal is standard, just combine the text of the two.
-	var eitherModalIncludesImg = ($(INFO_MODAL).html().includes("<img")) || (html.includes("<img"));
+	// If the modals can be combined, just combine them.
 	var eitherModalIsWaiting = waitingModalIsOpen() || (html.includes("Waiting"));
-
-	if ($(INFO_MODAL).is(':visible') && !eitherModalIncludesImg && !eitherModalIsWaiting) {
+	if ($(INFO_MODAL).is(':visible') && !eitherModalIsWaiting && !(html.includes("Emporio"))) {
 		var newModalElements = $(html);
 		var element = $('#infoModalText', newModalElements);
-		$("#infoModalText").prepend(element[0].innerText + '<br/><br/>');
+		if (html.includes("<img")) {
+			console.log("image included");
+			var imageDiv = $('#infoModalImages', newModalElements);
+			console.log(newModalElements);
+			console.log(imageDiv);
+			$(imageDiv[0]).appendTo(element);
+			console.log("element after appending image");
+			console.log(element);
+		}
+		$("#infoModalText").prepend(element[0].innerHTML + '<br/><br/>');
 	}
 
 	// Otherwise, load the new HTML into the modal and display it.

@@ -84,7 +84,7 @@ def getLocalFilePath(path=""):
 	pathToRoot = "\\".join(str(Path(__file__).parent.absolute()).split("\\")[:-2])
 	return "{}/{}".format(pathToRoot, path)
 
-def getObjectFromList(function, l):
+def getUniqueItem(function, l):
 	filtered = list(filter(function, l))
 
 	return None if len(filtered) != 1 else filtered[0]
@@ -120,9 +120,6 @@ def getReverseFormat(formatString, s):
 	match = re.search(r, s)
 	logGameplay("Result for reverse format of {} using string \"{}: {}\"".format(formatString, s, None if match == None else list(match.groups())))
 	return None if match == None else list(match.groups())
-
-def createPlayPageTuple(player, html):
-	return createEmitTuples(constants.RELOAD_PLAY_PAGE, {'html': html}, recipients=[player])[0]
 
 def getCardsInHandTemplate(player, isCurrentPlayer):
 	return Markup(render_template('cards_in_hand.html', player=player, isCurrentPlayer=isCurrentPlayer))
@@ -215,8 +212,8 @@ def createDiscardTuple(discardTop):
 def createPlayerInfoListTuple(playerInfoList):
 	return createEmitTuples(constants.UPDATE_PLAYER_LIST, {'html': getPlayerInfoListTemplate(playerInfoList)}, recipients=[])[0]
 
-def createDiscardClickTuple(player):
-	return createEmitTuples(constants.DISCARD_CLICK, dict(), recipients=[player])[0]
+def createDiscardClickTuples(player):
+	return [(constants.SLEEP, 0.2, None)] + createEmitTuples(constants.DISCARD_CLICK, dict(), recipients=[player])
 
 # Returns tuples that are processed by the server and emitted via socket.
 def createEmitTuples(emitString, data, recipients=[]):
@@ -235,28 +232,15 @@ def createEmitTuples(emitString, data, recipients=[]):
 def consolidateTuples(tuples):
 	logServer("Checking tuples for consolidation: {}".format(tuples))
 
-	# If there are SLEEPs in the tuples, consolidate by removing consecutive ones.
-	if any([tup[0] == constants.SLEEP for tup in tuples]):
-		for i in range(len(tuples) - 2, -1, -1):
-			if tuples[i][0] == constants.SLEEP and tuples[i+1][0] == constants.SLEEP:
-				tuples.pop(i+1)
-				tuples[i][1] = max(tuples[i][1], 1) # Set the remaining sleep to 1 second at most.
-		
-		logServer("Consolidated SLEEPS in the tuples: {}".format(tuples))
-	
-	# If there are multiple waiting messages for the current player, combine them into one general waiting message.
-	# Also, if there are any info tuples for that player, they come before the waiting messages this way.
-	waitingModalTuples = [tup for tup in tuples if tup[0] == constants.SHOW_WAITING_MODAL]
-	if len(waitingModalTuples) > 0:
-		tuples = [tup for tup in tuples if tup not in waitingModalTuples] # Will move the info tuples ahead.
-		
-		tuples.append((constants.SLEEP, 0.2, None)) # Add a slight SLEEP to make sure the waiting message arrives last.
-		if len(waitingModalTuples) == 1:
-			tuples.append(waitingModalTuples[0])
-		else:
-			tuples.append(createWaitingModalTuple(waitingModalTuples[0][2], "Waiting for {} players...".format(len(waitingModalTuples))))
+	# Remove any duplicates if there are any. Maintain the order and keep the newest versions.
+	nonDuplicated = []
+	for t in tuples[::-1]:
+		if t[0] == constants.SLEEP or t not in nonDuplicated:
+			nonDuplicated.append(t)
 
-		logServer("Consolidated waiting/info messages: {}".format(tuples))
+	if len(nonDuplicated) < len(tuples):
+		logServer("Tuples after removing duplicates: {}".format(tuples))
+	tuples = nonDuplicated[::-1]
 
 	# If a player got multiple updates to his/her card carousel, just use the last (i.e. most updated) one.
 	carouselDict = dict()
@@ -265,6 +249,27 @@ def consolidateTuples(tuples):
 			carouselDict[t[2].username] = t # Overwrite any older version.
 
 	tuples = [t for t in tuples if t[0] != constants.UPDATE_CARD_HAND or t in carouselDict.values()]
+
+	# If there are multiple waiting messages for the current player, combine them into one general waiting message and make this the last tuple.
+	# This way, if there are any info tuples for that player, they'll come before the waiting messages.
+	waitingModalTuples = [tup for tup in tuples if tup[0] == constants.SHOW_WAITING_MODAL]
+	if len(waitingModalTuples) > 1:
+		tuples = [tup for tup in tuples if tup not in waitingModalTuples] # Will move the info tuples ahead.
+		tuples.append((constants.SLEEP, 0.2, None)) # Add a slight SLEEP to make sure the waiting message arrives last.
+		tuples.append(waitingModalTuples[0])
+		tuples.append(createWaitingModalTuple(waitingModalTuples[0][2], "Waiting for {} players...".format(len(waitingModalTuples))))
+
+		logServer("Consolidated waiting/info messages: {}".format(tuples))
+
+	# Finally, if there are SLEEPs in the tuples, consolidate by removing consecutive ones.
+	if any([tup[0] == constants.SLEEP for tup in tuples]):
+		for i in range(len(tuples) - 2, -1, -1):
+			if tuples[i][0] == constants.SLEEP and tuples[i+1][0] == constants.SLEEP:
+				tuples.pop(i+1)
+				newTuple = (constants.SLEEP, max(tuples[i][1], 1), None) 
+				tuples[i] = newTuple # Set the remaining sleep to 1 second at most.
+		
+		logServer("Consolidated SLEEPS in the tuples: {}".format(tuples))
 
 	return tuples
 
