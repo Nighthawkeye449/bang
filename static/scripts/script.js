@@ -259,13 +259,8 @@ function showInfoModal(html) {
 		var newModalElements = $(html);
 		var element = $('#infoModalText', newModalElements);
 		if (html.includes("<img")) {
-			console.log("image included");
 			var imageDiv = $('#infoModalImages', newModalElements);
-			console.log(newModalElements);
-			console.log(imageDiv);
 			$(imageDiv[0]).appendTo(element);
-			console.log("element after appending image");
-			console.log(element);
 		}
 		$("#infoModalText").prepend(element[0].innerHTML + '<br/><br/>');
 	}
