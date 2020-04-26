@@ -1,11 +1,26 @@
 {% for p in playerInfoList %}
-    <div id="player_div_{{ p.username }}" class="column {{ 'eliminated' if not p.isAlive() }}" style="width: {{ (100 / playerInfoList|length) - 1 }}%;">
-        <h2 class="centered_text">{{ p.username }}</h1>
-        <img id="{{ p.username }}PlayerImage" src="{{ url_for('static', filename='/images/cards/' + ('characters/' if p.isAlive() else 'roles/') + (p.character.name|convertNameToPath if p.isAlive() else p.role.lower()) + '.jpg') }}" alt="{{ p.character.name }}" class="zoom_hover_1_5 centered player_column">
-        <div class="centered player_column">
-            {% for _ in range(p.lives) %}
-                <img src="{{ url_for('static', filename='/images/bullet.png') }}" style="max-width: 17%">
-            {% endfor %}
-        </div>
+    <div id="player_div_{{ p.username }}" class="playerInfoColumn column {{ 'eliminated' if not p.isAlive() }}" style="height: 100%; width: {{ (100 / playerInfoList|length) - 1 }}%;{% if p == playerInfoList[0] %} border: 1px solid red; {% endif %}">
+    	<a data-toggle="tooltip" title="
+    	{% if p.role == 'Sheriff' %} <img style='max-width: 30%' src='{{ url_for('static', filename='/images/badge.png')}}'> {% endif %}
+    	<img style='max-width: 30%' src='{{ url_for('static', filename='/images/cards/actions/flipped_over.jpg')}}' class='centered centered_text'><span> X {{ p.cardsInHand|length }}</span>
+    		{% if p.jailStatus == 1 or p.hasTheDynamite() or p.cardsInPlay|length > 0 %}<br><br>{% endif %}
+    		{% if p.jailStatus == 1 %} <img style='max-width: 30%' src='{{ url_for('static', filename='/images/jail.png')}}'> {% endif %}
+    		{% if p.hasTheDynamite() %} <img style='max-width: 30%' src='{{ url_for('static', filename='/images/dynamite.png')}}'> {% endif %}
+    		{% if p.cardsInPlay|length > 0 %}
+	    		{% if p.jailStatus == 1 or p.hasTheDynamite() %}<br><br>{% endif %}
+	    		<span>
+	    		{% if p.cardsInPlay|length == 2 %} {{ p.cardsInPlay[0].getDisplayName() + ', ' + p.cardsInPlay[1].getDisplayName() }}
+	    		{% else %} {{ p.cardsInPlay[0].getDisplayName() }}
+	    		{% endif %}
+	    		</span>
+    		{% endif %}<br><br>">
+	        <h2 class="centered_text player-list-usernames">{{ p.username }}</h1>
+	        <img id="{{ p.username }}PlayerImage" src="{{ url_for('static', filename='/images/cards/' + ('characters/' if p.isAlive() else 'roles/') + (p.character.name|convertNameToPath if p.isAlive() else p.role.lower()) + '.jpg') }}" alt="{{ p.character.name }}" class="zoom_hover_1_5 centered player_column">
+	        <div class="centered player_column">
+	            {% for _ in range(p.lives) %}
+	                <img src="{{ url_for('static', filename='/images/bullet.png') }}" style="max-width: 17%">
+	            {% endfor %}
+	        </div>
+        </a>
     </div>
 {% endfor %}

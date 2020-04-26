@@ -123,11 +123,12 @@ EMPORIO_CARD_PICKED = "emporio_card_picked"
 ENDING_TURN = "ending_turn"
 DISCARDING_CARD = "discarding_card"
 USE_SPECIAL_ABILITY = "use_special_ability"
+REQUEST_PLAYER_LIST = "request_player_list"
 
 # Constants for modals and the update screen.
 QUESTION_CARD_FORMAT = "{} ({} of {}s)"
 ALREADY_MAX_LIVES = "You already have your maximum number of lives!"
-CLICK_ON_CARD = "Click on the card in your hand that you want to use."
+CLICK_ON_CARD = "Click on the {} in your hand that you want to use."
 DREW_2_CARDS = "{} drew 2 cards from the deck."
 PICKED_UP_FROM_EMPORIO = "{} picked up {} from Emporio."
 WAITING_DUELLO_REACTION = "Waiting for {} to decide how to react to Duello..."
@@ -138,5 +139,5 @@ SID_KETCHUM_INFO = "Click on the 2 cards in your hand that you want to discard i
 OK_MSG = "OK"
 EMPTY_RESPONSE = ('', 204)
 FLIPPED_OVER = "flipped_over"
-CARD_IMAGES_PATH = "/images/cards/actions/{}.jpg"
-ROLE_IMAGES_PATH = "/images/cards/roles/{}.jpg"
+CARD_IMAGES_PATH = "static/images/cards/actions/{}.jpg"
+AUTOMATIC_SLEEP_DURATION = 3

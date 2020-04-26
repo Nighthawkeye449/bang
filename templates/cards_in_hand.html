@@ -1,8 +1,0 @@
-{% for card in player.cardsInHand %}
-<div class="item {% if loop.first %}active{% endif %}">
-    <div class="col-xs-4">
-        <a href="#"><img style="max-width: 70%" src="{{ url_for('static', filename='/images/cards/actions/' + card.uid|string + '.jpg') }}" class="img-responsive zoom_hover_2" alt="{{ card.name }} {{ card.uid|string }}" onclick="{{ 'playCard(' + card.uid|string + ')' if isCurrentPlayer else '' }}"></a>
-        <span>{{ card.name }}</span>
-    </div>
-</div>
-{% endfor %}

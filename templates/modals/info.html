@@ -1,12 +1,12 @@
-<div class="modal-dialog">
+<div class="modal-dialog modal-lg">
 
     <div class="modal-content">
       <div class="modal-header">
         <button type="button" class="close" data-dismiss="modal">&times;</button>
         <h4 class="modal-title">{{ header if header }}</h4>
       </div>
-      <div class="modal-body">
-        <p id="infoModalText">{{ text }}</p>{{ cardsTemplate if cardsTemplate }}
+      <div class="modal-body centered_text">
+        <p id="infoModalText" class="centered centered_text">{{ text }}</p>{{ cardsTemplate if cardsTemplate }}
       </div>
       <div class="modal-footer">
         <button type="button" class="btn btn-default" data-dismiss="modal">Close</button>

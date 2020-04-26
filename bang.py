@@ -8,12 +8,11 @@ import sys
 import time
 
 # Import local modules.
-sys.path.append('{}/static/library/'.format(sys.path[0]))
-from constants import *
-from gameplay import Gameplay
-from playergame import PlayerGame
-import jinjafunctions
-import utils
+from static.library import jinjafunctions
+from static.library import utils
+from static.library.constants import *
+from static.library.gameplay import Gameplay
+from static.library.playergame import PlayerGame
 
 def handler(signal_received, frame):
     # Catch CTRL-C in order to separate sessions in the log.
@@ -104,7 +103,7 @@ def emitTuples(tuples):
 JSON_GAME_PATH = utils.getLocalFilePath("game.json")
 
 # Server setup
-app = Flask(__name__, static_url_path='')
+app = Flask(__name__, static_url_path='/static', template_folder='templates')
 app.secret_key = 'secretkey1568486123168'
 socketio = SocketIO(app)
 
@@ -153,8 +152,7 @@ def setCharacter(username, character):
 			tuples = game['gp'].finalizeSetup()
 
 	if tuples:
-		playPageTuples = [(RELOAD_PLAY_PAGE, {'html': game['gp'].renderPlayPageForPlayer(p.username)}, p) for p in game['gp'].players.values()]
-		emitTuples(playPageTuples + tuples)
+		emitTuples(tuples)
 
 @socketio.on(CARD_WAS_DISCARDED)
 def cardWasDiscarded(username, uid):
@@ -230,13 +228,20 @@ def specialAbility(username):
 		utils.logServer("Received socket message '{}' from {}.".format(USE_SPECIAL_ABILITY, username))
 		emitTuples(game['gp'].useSpecialAbility(username))
 
+@socketio.on(REQUEST_PLAYER_LIST)
+def getTooltips(username):
+	utils.logServer("Received socket message '{}' from {}.".format(REQUEST_PLAYER_LIST, username))
+	with lock:
+		tuples = game['gp'].getPlayerList(username)
+	emitTuples(tuples)
+
 #################### App routes ####################
 
 @app.route("/", methods = ['POST', 'GET'])
 def homePage():
 	with lock:
 		# Don't let a new player join if the game has already started.
-		if game['gp'].started:
+		if game['gp'].started or len(game['gp'].players) == 7:
 			utils.logServer("A player attempted to join the game after it had started.")
 			return render_template('game_started.html')
 
@@ -248,11 +253,7 @@ def homePage():
 			
 			# Add this new player if the username is valid.
 			username = utils.cleanUsernameInput(request.form['name'])
-			if username in game['gp'].players: # If the username is taken, just display an error message and let the user try again.
-				utils.logServer("A player attempted to join with username {}, which is already taken. Rendering home page with warning message.".format(username))
-				return render_template('home.html', warning_msg="Sorry, that username is taken! Try something else.")
-			elif username.upper() in utils.getListOfConstants():
-				utils.logServer("A player attempted to join with username {}, which matches a constant. Rendering home page with warning message.".format(username))
+			if not checkUsernameValidity(username):
 				return render_template('home.html', warning_msg="Sorry, that username is invalid! Try something else.")
 			else:
 				utils.logServer("Adding new username {} to the game.".format(username))
@@ -271,6 +272,7 @@ def homePage():
 @app.route("/setup", methods = ['POST', 'GET'])
 def setup():
 	username = request.json['username']
+	utils.logServer("Received request for '/setup' from {}".format(username))
 
 	with lock:
 		game['gp'].assignNewPlayer(username)
@@ -296,9 +298,21 @@ def synchronousPost():
 	uid = int(request.json['uid'])
 	path = request.json['path']
 
-# @app.errorhandler(404)
-# def page_not_found(error):
-#     return redirect(url_for('home_page'))
+def checkUsernameValidity(username):
+	if len(username) == 0:
+		utils.logServer("A player's username was empty after filtering out characters. Rendering home page with warning message.")
+		return False
+	elif username in game['gp'].players: # If the username is taken, just display an error message and let the user try again.
+		utils.logServer("A player attempted to join with username {}, which is already taken. Rendering home page with warning message.".format(username))
+		return False
+	elif username.upper() in utils.getListOfConstants():
+		utils.logServer("A player attempted to join with username {}, which matches a constant. Rendering home page with warning message.".format(username))
+		return False
+	elif all([c.isdigit() for c in username]):
+		utils.logServer("A player attempted to join with a digit-only username. Rendering home page with warning message.")
+		return False
+
+	return True
 
 # Start Server
 if __name__ == '__main__':
@@ -306,10 +320,9 @@ if __name__ == '__main__':
 	signal(SIGINT, handler)
 
 	app.jinja_env.filters['convertNameToPath'] = jinjafunctions.convertNameToPath
+
 	ip = game['site_variables']['ip'] if 'ip' in game['site_variables'] else "127.0.0.1"
 	port = game['site_variables']['port'] if 'port' in game['site_variables'] else 9999
 	utils.logServer("Site starting on http://" + ip + ":" + str(port))
 
-	os.startfile("C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe")
-
-	socketio.run(app, debug=True, host=ip, port=port)
+	socketio.run(app, debug=False, host=ip, port=port)

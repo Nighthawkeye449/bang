@@ -1,8 +1,8 @@
-from card import Card, GunCard
-from character import Character
+from static.library import constants
+from static.library.card import Card, GunCard
+from static.library.character import Character
 from flask import Markup, render_template
 from pathlib import Path
-import constants
 import datetime
 import inspect
 import json
@@ -82,7 +82,7 @@ def cleanUsernameInput(s):
 
 def getLocalFilePath(path=""):
 	pathToRoot = "\\".join(str(Path(__file__).parent.absolute()).split("\\")[:-2])
-	return "{}/{}".format(pathToRoot, path)
+	return "{}{}{}".format(pathToRoot, "/" if len(pathToRoot) > 0 else "", path)
 
 def getUniqueItem(function, l):
 	filtered = list(filter(function, l))
@@ -121,9 +121,6 @@ def getReverseFormat(formatString, s):
 	logGameplay("Result for reverse format of {} using string \"{}: {}\"".format(formatString, s, None if match == None else list(match.groups())))
 	return None if match == None else list(match.groups())
 
-def getCardsInHandTemplate(player, isCurrentPlayer):
-	return Markup(render_template('cards_in_hand.html', player=player, isCurrentPlayer=isCurrentPlayer))
-
 def getCardsInPlayTemplate(player):
 	return Markup(render_template('cards_in_play.html', player=player))
 
@@ -157,9 +154,9 @@ def createQuestionTuple(recipient, question, options, cardsDrawn=None):
 
 	return createEmitTuples(constants.SHOW_QUESTION_MODAL, data, [recipient])[0]
 
-# Tuple to show an un-closeable waiting modal for a player.
+# Tuple to show an unclosable waiting modal for a player.
 def createWaitingModalTuple(player, text):
-	data = {'html': render_template('/modals/waiting.html', text=text)}
+	data = {'html': render_template('/modals/unclosable.html', text=text)}
 	return createEmitTuples(constants.SHOW_WAITING_MODAL, data, [player])[0]
 
 # Tuples to update players' action screens.
@@ -173,7 +170,7 @@ def createCardBlurTuples(player, cardName, msg=None):
 	else:
 		cardNames = [cardName]
 
-	msg = constants.CLICK_ON_CARD if msg == None else msg
+	msg = constants.CLICK_ON_CARD.format(convertRawNameToDisplay(cardName) if len(cardNames) == 1 else "card") if msg == None else msg
 
 	return createInfoTuples(msg, recipients=[player]) + createEmitTuples(constants.BLUR_CARD_SELECTION, {'cardNames': cardNames}, recipients=[player])
 
@@ -190,7 +187,7 @@ def createEmporioTuples(alivePlayers, cardsLeft, playerPicking):
 			cardImagesTemplate = Markup(render_template('/modals/card_images.html', cards=cardsLeft))
 			text = "{} is currently picking a card:".format(playerPicking.username)
 
-		data = {'html': render_template('/modals/info.html', text=text, header="Emporio", cardsTemplate=cardImagesTemplate)}		
+		data = {'html': render_template('/modals/unclosable.html', text=text, header="Emporio", cardsTemplate=cardImagesTemplate)}		
 
 		emitTuples.extend(createEmitTuples(constants.SHOW_INFO_MODAL, dict(data), recipients=[p]))
 
@@ -198,7 +195,7 @@ def createEmporioTuples(alivePlayers, cardsLeft, playerPicking):
 
 # Tuple to update a given player's cards-in-hand carousel.
 def createCardCarouselTuple(player, isCurrentPlayer):
-	return createEmitTuples(constants.UPDATE_CARD_HAND, {'html': getCardsInHandTemplate(player, isCurrentPlayer)}, recipients=[player])[0]
+	return createEmitTuples(constants.UPDATE_CARD_HAND, {'cardInfo': player.getCardInfo(isCurrentPlayer)}, recipients=[player])[0]
 
 # Tuple to update the images for a player's cards in play.
 def createCardsInPlayTuple(player):
@@ -209,8 +206,8 @@ def createDiscardTuple(discardTop):
 	return createEmitTuples(constants.UPDATE_DISCARD_PILE, {'path': constants.CARD_IMAGES_PATH.format(discardTop.uid if discardTop != None else constants.FLIPPED_OVER)}, recipients=[])[0]
 
 # Tuple to update the player order/lives/etc. for everybody.
-def createPlayerInfoListTuple(playerInfoList):
-	return createEmitTuples(constants.UPDATE_PLAYER_LIST, {'html': getPlayerInfoListTemplate(playerInfoList)}, recipients=[])[0]
+def createPlayerInfoListTuple(playerInfoList, player=None):
+	return createEmitTuples(constants.UPDATE_PLAYER_LIST, {'html': getPlayerInfoListTemplate(playerInfoList)}, recipients=[] if player == None else [player])[0]
 
 def createDiscardClickTuples(player):
 	return [(constants.SLEEP, 0.2, None)] + createEmitTuples(constants.DISCARD_CLICK, dict(), recipients=[player])
@@ -244,22 +241,18 @@ def consolidateTuples(tuples):
 
 	# If a player got multiple updates to his/her card carousel, just use the last (i.e. most updated) one.
 	carouselDict = dict()
+	originalLen = len(tuples)
 	for t in tuples:
 		if t[0] == constants.UPDATE_CARD_HAND:
 			carouselDict[t[2].username] = t # Overwrite any older version.
 
 	tuples = [t for t in tuples if t[0] != constants.UPDATE_CARD_HAND or t in carouselDict.values()]
+	if len(tuples) != originalLen:
+		logServer("Tuples after removing card hand updates: {}".format(tuples))
 
-	# If there are multiple waiting messages for the current player, combine them into one general waiting message and make this the last tuple.
-	# This way, if there are any info tuples for that player, they'll come before the waiting messages.
+	# If there are any waiting messages, move them to the back in order to have the info messages show up first.
 	waitingModalTuples = [tup for tup in tuples if tup[0] == constants.SHOW_WAITING_MODAL]
-	if len(waitingModalTuples) > 1:
-		tuples = [tup for tup in tuples if tup not in waitingModalTuples] # Will move the info tuples ahead.
-		tuples.append((constants.SLEEP, 0.2, None)) # Add a slight SLEEP to make sure the waiting message arrives last.
-		tuples.append(waitingModalTuples[0])
-		tuples.append(createWaitingModalTuple(waitingModalTuples[0][2], "Waiting for {} players...".format(len(waitingModalTuples))))
-
-		logServer("Consolidated waiting/info messages: {}".format(tuples))
+	tuples = [tup for tup in tuples if tup[0] != constants.SHOW_WAITING_MODAL] + waitingModalTuples
 
 	# Finally, if there are SLEEPs in the tuples, consolidate by removing consecutive ones.
 	if any([tup[0] == constants.SLEEP for tup in tuples]):
@@ -271,6 +264,7 @@ def consolidateTuples(tuples):
 		
 		logServer("Consolidated SLEEPS in the tuples: {}".format(tuples))
 
+	logServer("tuples after consolidating: {}".format(tuples))
 	return tuples
 
 	

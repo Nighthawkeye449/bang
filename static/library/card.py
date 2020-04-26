@@ -1,6 +1,6 @@
-from constants import QUESTION_CARD_FORMAT
+from static.library import utils
+from static.library.constants import QUESTION_CARD_FORMAT
 import json
-import utils
 
 '''
 UID mapping:

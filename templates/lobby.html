@@ -1,14 +1,20 @@
-{% extends "SKELETON.html" %}
+{% extends "skeleton.html" %}
 {% block content %}
     <body>
         <div class="outer">
-			<ul id="lobby_usernames">
-			{% for username in usernames %}
-				<li>{{ username }}</li> 
-			{% endfor %}
-			</ul>
-			<button type="button" id="start_button" style="display: {{ 'block' if usernames|length >= 4 and usernames|length <= 7 else 'none' }}" onclick="startButtonClick()">Let's bang!!</button>
-			<span id="countdown_span" style="display: none"></span>
+        	<h1 class="bang-title" style="font-size: 200px; margin-top: 0%; position: relative">Bang!</h1>
+
+        	<div style="position: relative; display: table; margin: 0 auto">
+        		<span id="lobby-title" class="lobby-text centered_text">In the lobby:</span>
+					<ul id="lobby_usernames" class="lobby-text" style="margin: 0 auto;">
+					{% for name in usernames %}
+						<li>{{ name }}</li> 
+					{% endfor %}
+					</ul>
+					<button type="button" id="start_button" class="btn btn-danger lobby-text" style="display: {{ 'block' if usernames|length >= 4 and usernames|length <= 7 and username == usernames[0] else 'none' }}; margin-top: 5%" onclick="startButtonClick()">Let's bang!</button>
+				<span id="countdown_span" style="display: none"></span>
+			</div>
+
         </div>
     </body>
 {% endblock %}

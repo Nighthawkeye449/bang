@@ -8,7 +8,8 @@
         <link rel="icon" sizes="256x256" href="{{ url_for('static', filename='icons/favicon.ico') }}">
         <title>Bang!</title>
         <link rel="stylesheet" type="text/css" href="{{ url_for('static', filename='style/style.css') }}">
-        <link rel="stylesheet" type="text/css" href="{{ url_for('static', filename='style/carousel.css') }}">
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Bangers">
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Acme">
         <link rel="stylesheet" href="//code.jquery.com/ui/1.12.1/themes/base/jquery-ui.css">
         <link href="//maxcdn.bootstrapcdn.com/bootstrap/3.3.0/css/bootstrap.min.css" rel="stylesheet" id="bootstrap-css">
         <script src="{{ url_for('static', filename='scripts/jquery.min.js') }}"></script>
@@ -19,7 +20,7 @@
     </head>
 
     <body>
-        <p id="username" class="username">{% if username %}{{username}}{% endif %}</p>
+        <p id="username" class="username" style="display: none;">{% if username %}{{username}}{% endif %}</p>
         {% block content %}{% endblock %}
     </body>
 </html> 

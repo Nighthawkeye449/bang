@@ -1,6 +1,6 @@
-from constants import *
+from static.library import utils
+from static.library.constants import *
 import random
-import utils
 
 class PlayerGame(dict):
 	def __init__(self, username=None):
@@ -139,3 +139,9 @@ class PlayerGame(dict):
 
 	def getPrigione(self):
 		return utils.getUniqueItem(lambda c: c.name == PRIGIONE, self.specialCards) # Will return None if the player isn't in jail.
+
+	def hasTheDynamite(self):
+		return any([c.name == DYNAMITE for c in self.specialCards])
+
+	def getCardInfo(self, isCurrentPlayer):
+		return [{'name': c.name, 'uid': c.uid, 'isCurrentPlayer': isCurrentPlayer} for c in sorted(self.cardsInHand, key=lambda c: c.uid)]

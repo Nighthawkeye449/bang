@@ -1,15 +1,16 @@
-from character import Character
-from constants import *
-from flask import Flask, render_template
-from flask_testing import TestCase
-from gameplay import Gameplay
-from html import unescape
-from playergame import PlayerGame
-
-import jinjafunctions
 import json
 import unittest
-import utils
+
+from flask import Flask, render_template
+from flask_testing import TestCase
+from html import unescape
+
+from static.library.character import Character
+from static.library.constants import *
+from static.library.gameplay import Gameplay
+from static.library import jinjafunctions
+from static.library.playergame import PlayerGame
+from static.library import utils
 
 game = Gameplay()
 players = {'A': PlayerGame('A'), 'B': PlayerGame('B'), 'C': PlayerGame('C'), 'D': PlayerGame('D'), 'E': PlayerGame('E'), 'F': PlayerGame('F'), 'G': PlayerGame('G')}
@@ -82,6 +83,7 @@ def setDefaults(uid=None, numPlayers=7):
     game.emporioOptions = list()
     game.duelPair = list()
     game.unansweredQuestions = dict()
+    game.playersWaitingFor = set()
 
     if uid != None: self.currentCard = self.getCardByUid(uid)
 
@@ -197,7 +199,7 @@ class TestGameplay(TestCase):
         self.assertEqual(game.validateCardChoice('A', 1)[0][0], SHOW_QUESTION_MODAL)
         
         tuples = game.processQuestionResponse('A', QUESTION_WHO_TO_SHOOT, 'B')
-        self.assertEqual(getEmitTypes(tuples), {UPDATE_DISCARD_PILE, UPDATE_CARD_HAND, UPDATE_ACTION, SHOW_INFO_MODAL, UPDATE_PLAYER_LIST})
+        self.assertEqual(getEmitTypes(tuples), {UPDATE_DISCARD_PILE, UPDATE_CARD_HAND, UPDATE_ACTION, SHOW_INFO_MODAL, UPDATE_PLAYER_LIST, SHOW_WAITING_MODAL})
         self.assertTrue(countEmitTypes(tuples, {UPDATE_ACTION: 2}))
         self.assertEqual(countEmitTypeToRecipient(tuples, UPDATE_CARD_HAND, players['A']), 1)
         self.assertEqual(countEmitTypeToRecipient(tuples, SHOW_INFO_MODAL, players['A']), 1)
@@ -239,7 +241,7 @@ class TestGameplay(TestCase):
         setPlayerLives({'B': 0}) # To also test shooting against someone who wasn't initally in range.
         
         tuples = game.validateCardChoice('A', 1)
-        self.assertEqual(getEmitTypes(tuples), CARD_PLAYED_TUPLES | PLAYER_TOOK_DAMAGE_TUPLES)
+        self.assertEqual(getEmitTypes(tuples), CARD_PLAYED_TUPLES | PLAYER_TOOK_DAMAGE_TUPLES | {SHOW_WAITING_MODAL})
         self.assertTrue(countEmitTypes(tuples, {SHOW_INFO_MODAL: 2}))
         self.assertEqual(countEmitTypeToRecipient(tuples, SHOW_INFO_MODAL, players['A']), 1)
         self.assertEqual(countEmitTypeToRecipient(tuples, SHOW_INFO_MODAL, players['C']), 1)
@@ -372,11 +374,7 @@ class TestGameplay(TestCase):
                 setPlayerCardsInHand({opponent.username: [opponentCardUids[i]]})
 
             tuples = utils.consolidateTuples(game.validateCardChoice('A', attackingUid))
-            waitingModalTuple = [t for t in tuples if t[0] == SHOW_WAITING_MODAL][0]
-            self.assertEqual(getEmitTypes(tuples), {UPDATE_DISCARD_PILE, UPDATE_CARD_HAND, SHOW_WAITING_MODAL, SHOW_QUESTION_MODAL, UPDATE_ACTION})
-            self.assertTrue(countEmitTypes(tuples, {SHOW_WAITING_MODAL: 1}))
-            self.assertEqual(countEmitTypeToRecipient(tuples, SHOW_WAITING_MODAL, players['A']), 1)
-            self.assertTrue("Waiting for {} players...".format(len(players) - 1) in waitingModalTuple[1]['html'])
+            self.assertEqual(getEmitTypes(tuples), {UPDATE_DISCARD_PILE, UPDATE_CARD_HAND, SHOW_QUESTION_MODAL, UPDATE_ACTION})
 
             for opponent in opponents:
                 tuples = game.processQuestionResponse(opponent.username, question, answer)
@@ -441,7 +439,7 @@ class TestGameplay(TestCase):
 
             tuples = game.processQuestionResponse('B', question, answer)
             self.assertEqual(getEmitTypes(tuples), BLUR_CARD_TUPLES)
-            self.assertTrue("Click on the card in your hand" in [t[1]['html'] for t in tuples if t[0] == SHOW_INFO_MODAL and t[2] == players['B']][0])
+            self.assertTrue("Click on the {} in your hand".format("Bang" if attackingUid == 58 else "Mancato") in [t[1]['html'] for t in tuples if t[0] == SHOW_INFO_MODAL and t[2] == players['B']][0])
             self.assertTrue(all([t[2] == players['B'] for t in tuples]))
 
             tuples = game.processBlurCardSelection('B', requiredCardUids[1])
@@ -469,7 +467,7 @@ class TestGameplay(TestCase):
             self.assertTrue(opponent.username in tuples[0][1].values())
 
         tuples = game.processQuestionResponse('A', QUESTION_WHO_TO_DUEL, 'D')
-        self.assertEqual(getEmitTypes(tuples), {SHOW_INFO_MODAL, UPDATE_CARD_HAND, UPDATE_PLAYER_LIST, UPDATE_DISCARD_PILE, UPDATE_ACTION})
+        self.assertEqual(getEmitTypes(tuples), {SHOW_INFO_MODAL, UPDATE_CARD_HAND, UPDATE_PLAYER_LIST, UPDATE_DISCARD_PILE, UPDATE_ACTION, SHOW_WAITING_MODAL})
         self.assertEqual(countEmitTypeToRecipient(tuples, UPDATE_CARD_HAND, players['A']), 1)
         self.assertEqual(countEmitTypeToRecipient(tuples, SHOW_INFO_MODAL, players['A']), 1)
         self.assertEqual(countEmitTypeToRecipient(tuples, SHOW_INFO_MODAL, players['D']), 1)
@@ -486,7 +484,7 @@ class TestGameplay(TestCase):
         setPlayerCardsInHand({'A': [55]})
 
         tuples = game.validateCardChoice('A', 55)
-        self.assertEqual(getEmitTypes(tuples), {SHOW_INFO_MODAL, UPDATE_CARD_HAND, UPDATE_PLAYER_LIST, UPDATE_DISCARD_PILE, UPDATE_ACTION})
+        self.assertEqual(getEmitTypes(tuples), {SHOW_INFO_MODAL, UPDATE_CARD_HAND, UPDATE_PLAYER_LIST, UPDATE_DISCARD_PILE, UPDATE_ACTION, SHOW_WAITING_MODAL})
         self.assertEqual(countEmitTypeToRecipient(tuples, SHOW_INFO_MODAL, players['A']), 1)
         self.assertTrue("B took the hit" in [t[1]['html'] for t in tuples if t[0] == SHOW_INFO_MODAL and t[2] == players['A']][0])
         self.assertEqual(countEmitTypeToRecipient(tuples, SHOW_INFO_MODAL, players['A']), 1)
@@ -530,7 +528,7 @@ class TestGameplay(TestCase):
         self.assertEqual(getEmitTypes(tuples), {SHOW_QUESTION_MODAL, SHOW_WAITING_MODAL, UPDATE_CARD_HAND, UPDATE_DISCARD_PILE, UPDATE_ACTION})
 
         tuples = game.processQuestionResponse('B', QUESTION_DUELLO_REACTION.format('A'), PLAY_A_BANG)
-        self.assertEqual(getEmitTypes(tuples), {SHOW_INFO_MODAL, UPDATE_PLAYER_LIST, UPDATE_ACTION, UPDATE_CARD_HAND, UPDATE_DISCARD_PILE})
+        self.assertEqual(getEmitTypes(tuples), {SHOW_INFO_MODAL, UPDATE_PLAYER_LIST, UPDATE_ACTION, UPDATE_CARD_HAND, UPDATE_DISCARD_PILE, SHOW_WAITING_MODAL})
         self.assertEqual(countEmitTypeToRecipient(tuples, SHOW_INFO_MODAL, players['A']), 1)
         self.assertEqual(countEmitTypeToRecipient(tuples, SHOW_INFO_MODAL, players['B']), 2)
         self.assertTrue("You were defeated in the Duello" in [t[1]['html'] for t in tuples if t[0] == SHOW_INFO_MODAL and t[2] == players['A']][0])
@@ -581,7 +579,7 @@ class TestGameplay(TestCase):
         game.processQuestionResponse('B', QUESTION_DUELLO_REACTION.format('A'), PLAY_A_BANG)
 
         tuples = game.processQuestionResponse('A', QUESTION_DUELLO_BANG_REACTION.format('B'), PLAY_A_BANG)
-        self.assertEqual(getEmitTypes(tuples), PLAYER_TOOK_DAMAGE_TUPLES | CARD_PLAYED_TUPLES)
+        self.assertEqual(getEmitTypes(tuples), PLAYER_TOOK_DAMAGE_TUPLES | CARD_PLAYED_TUPLES | {SHOW_WAITING_MODAL})
         self.assertEqual(countEmitTypeToRecipient(tuples, SHOW_INFO_MODAL, players['A']), 2)
         self.assertEqual(countEmitTypeToRecipient(tuples, SHOW_INFO_MODAL, players['B']), 1)
         self.assertTrue(playerGotInfo('A', "B took the hit", tuples))
@@ -603,7 +601,7 @@ class TestGameplay(TestCase):
 
         tuples = game.processQuestionResponse('B', QUESTION_DUELLO_REACTION.format('A'), PLAY_A_BANG)
         self.assertEqual(getEmitTypes(tuples), BLUR_CARD_TUPLES)
-        self.assertTrue("Click on the card in your hand" in [t[1]['html'] for t in tuples if t[0] == SHOW_INFO_MODAL and t[2] == players['B']][0])
+        self.assertTrue("Click on the Bang in your hand" in [t[1]['html'] for t in tuples if t[0] == SHOW_INFO_MODAL and t[2] == players['B']][0])
         self.assertTrue(all([t[2] == players['B'] for t in tuples]))
 
         tuples = game.processBlurCardSelection('B', 3)
@@ -611,7 +609,7 @@ class TestGameplay(TestCase):
 
         tuples = game.processQuestionResponse('A', QUESTION_DUELLO_BANG_REACTION.format('B'), PLAY_A_BANG)
         self.assertEqual(getEmitTypes(tuples), BLUR_CARD_TUPLES)
-        self.assertTrue("Click on the card in your hand" in [t[1]['html'] for t in tuples if t[0] == SHOW_INFO_MODAL and t[2] == players['A']][0])
+        self.assertTrue("Click on the Bang in your hand" in [t[1]['html'] for t in tuples if t[0] == SHOW_INFO_MODAL and t[2] == players['A']][0])
         self.assertTrue(all([t[2] == players['A'] for t in tuples]))
 
         tuples = game.processBlurCardSelection('A', 1)
@@ -620,7 +618,7 @@ class TestGameplay(TestCase):
         game.processQuestionResponse('B', QUESTION_DUELLO_BANG_REACTION.format('A'), PLAY_A_BANG)
 
         tuples = game.processQuestionResponse('A', QUESTION_DUELLO_BANG_REACTION.format('B'), PLAY_A_BANG)
-        self.assertEqual(getEmitTypes(tuples), PLAYER_TOOK_DAMAGE_TUPLES | CARD_PLAYED_TUPLES)
+        self.assertEqual(getEmitTypes(tuples), PLAYER_TOOK_DAMAGE_TUPLES | CARD_PLAYED_TUPLES | {SHOW_WAITING_MODAL})
         self.assertEqual(countEmitTypeToRecipient(tuples, SHOW_INFO_MODAL, players['A']), 2)
         self.assertEqual(countEmitTypeToRecipient(tuples, SHOW_INFO_MODAL, players['B']), 1)
         self.assertTrue(playerGotInfo('A', "B took the hit", tuples))
@@ -653,7 +651,7 @@ class TestGameplay(TestCase):
         game.processQuestionResponse('A', QUESTION_DUELLO_BANG_REACTION.format('B'), PLAY_A_BANG)
         
         tuples = game.processQuestionResponse('B', QUESTION_DUELLO_BANG_REACTION.format('A'), PLAY_A_BANG)
-        self.assertEqual(getEmitTypes(tuples), PLAYER_TOOK_DAMAGE_TUPLES | CARD_PLAYED_TUPLES)
+        self.assertEqual(getEmitTypes(tuples), PLAYER_TOOK_DAMAGE_TUPLES | CARD_PLAYED_TUPLES | {SHOW_WAITING_MODAL})
         self.assertEqual(countEmitTypeToRecipient(tuples, SHOW_INFO_MODAL, players['A']), 1)
         self.assertEqual(countEmitTypeToRecipient(tuples, SHOW_INFO_MODAL, players['B']), 2)
         self.assertTrue("You were defeated in the Duello" in [t[1]['html'] for t in tuples if t[0] == SHOW_INFO_MODAL and t[2] == players['A']][0])
@@ -769,7 +767,7 @@ class TestGameplay(TestCase):
 
         game.validateCardChoice('A', 1)
         tuples = game.processQuestionResponse('A', QUESTION_WHO_TO_SHOOT, 'B')
-        self.assertEqual(getEmitTypes(tuples), {SHOW_INFO_MODAL, UPDATE_CARD_HAND, UPDATE_DISCARD_PILE, UPDATE_ACTION, UPDATE_PLAYER_LIST})
+        self.assertEqual(getEmitTypes(tuples), {SHOW_INFO_MODAL, UPDATE_CARD_HAND, UPDATE_DISCARD_PILE, UPDATE_ACTION, UPDATE_PLAYER_LIST, SHOW_WAITING_MODAL})
         self.assertEqual(countEmitTypeToRecipient(tuples, SHOW_INFO_MODAL, players['A']), 1)
         self.assertEqual(countEmitTypeToRecipient(tuples, SHOW_INFO_MODAL, players['B']), 1)
 
@@ -788,7 +786,7 @@ class TestGameplay(TestCase):
 
         game.validateCardChoice('A', 1)
         tuples = game.processQuestionResponse('A', QUESTION_WHO_TO_SHOOT, 'B')
-        self.assertEqual(getEmitTypes(tuples), {SHOW_INFO_MODAL, UPDATE_CARD_HAND, UPDATE_DISCARD_PILE, UPDATE_ACTION, UPDATE_PLAYER_LIST})
+        self.assertEqual(getEmitTypes(tuples), {SHOW_INFO_MODAL, UPDATE_CARD_HAND, UPDATE_DISCARD_PILE, UPDATE_ACTION, UPDATE_PLAYER_LIST, SHOW_WAITING_MODAL})
         self.assertEqual(countEmitTypeToRecipient(tuples, SHOW_INFO_MODAL, players['A']), 1)
         self.assertEqual(countEmitTypeToRecipient(tuples, SHOW_INFO_MODAL, players['B']), 1)
 
@@ -846,7 +844,7 @@ class TestGameplay(TestCase):
         tuples = game.validateCardChoice('A', 60)
         self.assertEqual(getEmitTypes(tuples), {SHOW_INFO_MODAL})
         self.assertEqual(countEmitTypeToRecipient(tuples, SHOW_INFO_MODAL, players['A']), 1)
-        self.assertTrue("nobody would gain a life" in tuples[0][1]['html'])
+        self.assertTrue("no one would gain a life" in tuples[0][1]['html'])
 
         self.assertTrue(all([p.lives == p.lifeLimit for p in players.values()]))
         
@@ -1206,7 +1204,7 @@ class TestGameplay(TestCase):
         game.validateCardChoice('A', 1)
         
         tuples = game.processQuestionResponse('A', QUESTION_WHO_TO_SHOOT, 'C')
-        self.assertEqual(getEmitTypes(tuples), {UPDATE_DISCARD_PILE, UPDATE_CARD_HAND, UPDATE_ACTION, SHOW_INFO_MODAL, UPDATE_PLAYER_LIST})
+        self.assertEqual(getEmitTypes(tuples), {UPDATE_DISCARD_PILE, UPDATE_CARD_HAND, UPDATE_ACTION, SHOW_INFO_MODAL, UPDATE_PLAYER_LIST, SHOW_WAITING_MODAL})
 
         self.assertTrue(game.currentCard == None)
 
@@ -1249,7 +1247,7 @@ class TestGameplay(TestCase):
         game.validateCardChoice('A', 1)
         
         tuples = game.processQuestionResponse('A', QUESTION_WHO_TO_SHOOT, 'B')
-        self.assertEqual(getEmitTypes(tuples), {UPDATE_DISCARD_PILE, UPDATE_CARD_HAND, UPDATE_ACTION, SHOW_INFO_MODAL, UPDATE_PLAYER_LIST})
+        self.assertEqual(getEmitTypes(tuples), {UPDATE_DISCARD_PILE, UPDATE_CARD_HAND, UPDATE_ACTION, SHOW_INFO_MODAL, UPDATE_PLAYER_LIST, SHOW_WAITING_MODAL})
 
         self.assertTrue(game.currentCard == None)
 
@@ -1304,7 +1302,7 @@ class TestGameplay(TestCase):
             game.drawPile.append(nonHeartCard)
 
             tuples = game.validateCardChoice('A', attackingUid)
-            self.assertEqual(getEmitTypes(tuples), {SHOW_INFO_MODAL, SHOW_WAITING_MODAL, UPDATE_PLAYER_LIST, UPDATE_DISCARD_PILE, UPDATE_ACTION, UPDATE_CARD_HAND})
+            self.assertEqual(getEmitTypes(tuples), {SHOW_INFO_MODAL, UPDATE_PLAYER_LIST, UPDATE_DISCARD_PILE, UPDATE_ACTION, UPDATE_CARD_HAND})
             self.assertEqual(countEmitTypeToRecipient(tuples, SHOW_INFO_MODAL, players['A']), 1)
             self.assertEqual(countEmitTypeToRecipient(tuples, UPDATE_CARD_HAND, players['A']), 1)
             self.assertEqual(countEmitTypeToRecipient(tuples, SHOW_INFO_MODAL, players['B']), 2)
@@ -1352,7 +1350,7 @@ class TestGameplay(TestCase):
         game.drawPile.extend([heartCard, nonHeartCard])
 
         tuples = game.validateCardChoice('A', 54)
-        self.assertEqual(getEmitTypes(tuples), {SHOW_INFO_MODAL, SHOW_WAITING_MODAL, UPDATE_PLAYER_LIST, UPDATE_DISCARD_PILE, UPDATE_ACTION, UPDATE_CARD_HAND})
+        self.assertEqual(getEmitTypes(tuples), {SHOW_INFO_MODAL, UPDATE_PLAYER_LIST, UPDATE_DISCARD_PILE, UPDATE_ACTION, UPDATE_CARD_HAND})
         self.assertEqual(countEmitTypeToRecipient(tuples, SHOW_INFO_MODAL, players['A']), 2)
         self.assertEqual(countEmitTypeToRecipient(tuples, SHOW_INFO_MODAL, players['B']), 2)
         self.assertEqual(countEmitTypeToRecipient(tuples, SHOW_INFO_MODAL, players['C']), 1)
@@ -1530,7 +1528,7 @@ class TestGameplay(TestCase):
             expectedCardsInHand.pop(0)
 
             tuples = game.validateCardChoice('A', uid)
-            self.assertEqual(getEmitTypes(tuples), CARD_PLAYED_TUPLES | PLAYER_TOOK_DAMAGE_TUPLES)
+            self.assertEqual(getEmitTypes(tuples), CARD_PLAYED_TUPLES | PLAYER_TOOK_DAMAGE_TUPLES | {SHOW_WAITING_MODAL})
             self.assertEqual(countEmitTypeToRecipient(tuples, SHOW_INFO_MODAL, players['A']), 1)
             self.assertEqual(countEmitTypeToRecipient(tuples, SHOW_INFO_MODAL, players['B']), 1)
 
@@ -2725,7 +2723,7 @@ class TestGameplay(TestCase):
 
         tuples = game.processQuestionResponse('A', QUESTION_DUELLO_BANG_REACTION.format('B'), PLAY_A_BANG)
 
-        self.assertEqual(getEmitTypes(tuples), {SHOW_INFO_MODAL, UPDATE_CARD_HAND, UPDATE_ACTION, UPDATE_DISCARD_PILE, UPDATE_PLAYER_LIST})
+        self.assertEqual(getEmitTypes(tuples), {SHOW_INFO_MODAL, UPDATE_CARD_HAND, UPDATE_ACTION, UPDATE_DISCARD_PILE, UPDATE_PLAYER_LIST, SHOW_WAITING_MODAL})
         self.assertTrue(playerGotInfo('A', expectedInfo, tuples))
         self.assertTrue(playersGotUpdate(expectedUpdate, tuples))
 
@@ -2787,7 +2785,7 @@ class TestGameplay(TestCase):
         expectedUpdate = "B drew a card using Suzy Lafayette's ability."
 
         tuples = game.validateCardChoice('A', 1)
-        self.assertEqual(getEmitTypes(tuples), {SHOW_INFO_MODAL, UPDATE_CARD_HAND, UPDATE_ACTION, UPDATE_DISCARD_PILE, UPDATE_PLAYER_LIST})
+        self.assertEqual(getEmitTypes(tuples), {SHOW_INFO_MODAL, UPDATE_CARD_HAND, UPDATE_ACTION, UPDATE_DISCARD_PILE, UPDATE_PLAYER_LIST, SHOW_WAITING_MODAL})
         self.assertTrue(playerGotInfo('B', expectedInfo, tuples))
         self.assertTrue(playersGotUpdate(expectedUpdate, tuples))
 
@@ -3379,7 +3377,7 @@ class TestGameplay(TestCase):
         game.validateCardChoice('A', 1)
 
         tuples = game.processQuestionResponse('A', QUESTION_WHO_TO_SHOOT, 'B')
-        self.assertEqual(getEmitTypes(tuples), NEW_TURN_TUPLES)
+        self.assertEqual(getEmitTypes(tuples), (NEW_TURN_TUPLES - {UPDATE_CARDS_IN_PLAY}) | {SHOW_WAITING_MODAL})
         self.assertTrue(playerGotInfo('B', "You were hit by the Bang!! You've been eliminated! Better luck next time", tuples))
         for player in players.values():
             if player.username != 'B':
@@ -3623,7 +3621,6 @@ class TestGameplay(TestCase):
     def testTupleConsolidation(self):
         consolidatedTuples = utils.consolidateTuples([
             (SLEEP, 1, None),
-            (SHOW_WAITING_MODAL, "Waiting for B", players['A']),
             (SLEEP, 1, None),
             (UPDATE_CARD_HAND, "oldhand", players['A']),
             (SLEEP, 1, None),
@@ -3639,7 +3636,7 @@ class TestGameplay(TestCase):
             (SHOW_INFO_MODAL, {'html': "duplicate"}, players['A']),
             (UPDATE_CARD_HAND, "newhand", players['A']),
             (SLEEP, 1, None),
-            utils.createWaitingModalTuple(players['A'], "Waiting for 2 players...")
+            (SHOW_WAITING_MODAL, "Waiting for C", players['A'])
         ]
 
         self.assertEqual(consolidatedTuples, expectedConsolidatedTuples)

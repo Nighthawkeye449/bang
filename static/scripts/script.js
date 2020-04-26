@@ -3,10 +3,14 @@ var username;
 
 var OK_MSG = "OK";
 var INFO_MODAL = "#info_modal";
+var INFO_MODAL_TEXT = "#infoModalText";
+var INFO_MODAL_IMAGES = "#infoModalImages";
 var QUESTION_MODAL = "#question_modal"
 var TOP_HALF = "#topHalfDiv"
 var BOTTOM_HALF = "#bottomHalfDiv"
-var CARD_CAROUSEL = "#cardsInHandCarousel"
+var CARDS_IN_HAND_DIV = "#cardsInHandDiv"
+var CARDS_IN_PLAY_DIV = "#cardsInPlayDiv";
+var DISCARD_DIV = "#discardCardDiv";
 var WAITING_FOR_SPAN = "#waitingForSpan"
 
 var cardsAreBlurred = false;
@@ -36,7 +40,7 @@ $(document).ready(function(){
 		socket.on('show_question_modal', function(data) {
 			// Close the waiting modal if it's currently open, as it will block the question modal.
 			if (waitingModalIsOpen()) {
-				closeWaitingModal();
+				closeInfoModal();
 			}
 
 			if (isNullOrUndefined($(QUESTION_MODAL).html())) { // Undefined if the message was received before the page was rendered.
@@ -54,7 +58,7 @@ $(document).ready(function(){
 			{
 				// Close the waiting modal if it's open.
 				if ($(INFO_MODAL).is(':visible')) {
-					if ($('#infoModalText').text().indexOf('Waiting') > -1) {
+					if ($(INFO_MODAL_TEXT).text().indexOf('Waiting') > -1) {
 						$(INFO_MODAL).modal('hide');
 						$(INFO_MODAL).html('');
 					}
@@ -93,7 +97,6 @@ $(document).ready(function(){
 
 		socket.on('show_waiting_modal', function(data) {
 			showInfoModal(data.html);
-			addBlurToFullScreen();
 		});
 
 		/* Socket functions for waiting in the lobby. */
@@ -109,7 +112,7 @@ $(document).ready(function(){
 			$('#lobby_usernames').html(lobby_players_list_string);
 
 			// Once enough players are in the game, show the start button.
-			if (players.length >= 4 && players.length <= 7) {
+			if (players.length >= 4 && players.length <= 7 && username == players[0]) {
 				$("#start_button").css("display", "block");
 			}
 		});
@@ -163,11 +166,17 @@ $(document).ready(function(){
 		/* Socket functions for the play page. */
 
 		socket.on('reload_play_page', function(data) {
-			loadPlayPage(data.html);
+			loadPlayPage(data);
 		});
 
 		socket.on('update_action', function(data) {
-			$("#updateActionList").prepend("<li>" + data.update + "</li>");
+			var startTag = "<li>";
+			if (!data.update.includes("started their turn")) {
+				startTag = "<li " + "style='margin-left: 25px;'" + ">"
+			}
+
+			$("#updateActionList").prepend(startTag + data.update + "</li>");
+			socket.emit('request_player_list', username);
 		});
 
 		socket.on('blur_card_selection', function(data) {
@@ -175,9 +184,7 @@ $(document).ready(function(){
 		});
 
 		socket.on('update_card_hand', function(data) {
-			$("#cardsInHandCarouselInnerDiv").html("");
-			$("#cardsInHandCarouselInnerDiv").html(data.html);
-			setupCarousel();
+			createHardHand(data.cardInfo);
 		});
 
 		socket.on('update_cards_in_play', function(data) {
@@ -196,6 +203,7 @@ $(document).ready(function(){
 		socket.on('update_player_list', function(data) {
 			$(BOTTOM_HALF).html("");
 			$(BOTTOM_HALF).html(data.html);
+			setupTooltip();
 		});
 
 		socket.on('discard_click', function(data) {
@@ -244,29 +252,33 @@ function chooseCharacter(character, isOption1) {
 	}
 }
 
-function loadPlayPage(html) {
-	loadHtml(html);
-	setupCarousel();
+function loadPlayPage(data) {
+	loadHtml(data.html);
+	createHardHand(data.cardInfo);
+	setupTooltip();
 }
 
 function showInfoModal(html) {
-	// If an info message arrives once the waiting modal is already open, the blurs on the play screen need to be removed here.
-	removeBlurFromFullScreen();
-
 	// If the modals can be combined, just combine them.
-	var eitherModalIsWaiting = waitingModalIsOpen() || (html.includes("Waiting"));
+	var eitherModalIsWaiting = waitingModalIsOpen() || html.includes("Waiting");
 	if ($(INFO_MODAL).is(':visible') && !eitherModalIsWaiting && !(html.includes("Emporio"))) {
 		var newModalElements = $(html);
-		var element = $('#infoModalText', newModalElements);
+		var element = $(INFO_MODAL_TEXT, newModalElements);
 		if (html.includes("<img")) {
-			var imageDiv = $('#infoModalImages', newModalElements);
+			var imageDiv = $(INFO_MODAL_IMAGES, newModalElements);
 			$(imageDiv[0]).appendTo(element);
 		}
-		$("#infoModalText").prepend(element[0].innerHTML + '<br/><br/>');
+		$(INFO_MODAL_TEXT).prepend(element[0].innerHTML + '<br/><br/>');
 	}
 
 	// Otherwise, load the new HTML into the modal and display it.
 	else {
+		if ($(INFO_MODAL).is(':visible') && html.includes("Waiting")) {
+			var element = $(INFO_MODAL_TEXT);
+			var textToAppend = "<br/><br/>" + element[0].innerHTML;
+			html = html.replace("</p>", textToAppend + "</p>");
+		}
+
 		closeInfoModal();
 		$(INFO_MODAL).html(html);
 		$(INFO_MODAL).modal('show');
@@ -287,12 +299,13 @@ function discardCard(uid) {
 }
 
 function addBlurToCards(cardNames) {
-	$(CARD_CAROUSEL).find("img").each(function() {
+	$(CARDS_IN_HAND_DIV).find("img").each(function() {
 		var cardName = $(this).attr("alt").split(' ')[0];
 		var uid = $(this).attr("alt").split(' ')[1];
 		
 		if (!cardNames.includes(cardName)) {
 			$(this).addClass("blur");
+			$(this).css("z-index", 5);
 		}
 		else {
 			$(this).attr("onClick", "playBlurCard(" + uid + ")" ); 
@@ -303,53 +316,28 @@ function addBlurToCards(cardNames) {
 }
 
 function removeBlurFromCards() {
-	$(CARD_CAROUSEL).find("img").each(function() {
+	$(CARDS_IN_HAND_DIV).find("img").each(function() {
 		$(this).removeClass("blur");
-		$(this).removeAttr("onClick"); // If the player is the current player, the click function will be reset by the new card carousel.
+		$(this).removeAttr("onClick"); // If the player is the current player, the click function will be reset by the new cards.
 	});
 	
 	cardsAreBlurred = false;
-}
-
-function addBlurToFullScreen() {
-	$(TOP_HALF).addClass("blur");
-	$(BOTTOM_HALF).addClass("blur");
-}
- 
-function removeBlurFromFullScreen() {
-	$(TOP_HALF).removeClass("blur");
-	$(BOTTOM_HALF).removeClass("blur");
 }
 
 function pickEmporioCard(uid) {
 	socket.emit('emporio_card_picked', username, uid);
 }
 
-function setupCarousel() {
-	$(CARD_CAROUSEL).carousel({
-	  interval: false
-	});
-
-	$('.carousel-inner').css('overflow', 'visible');
-
-	$('.carousel .item').each(function(){
-	  var next = $(this).next();
-	  if (!next.length) {
-	    next = $(this).siblings(':first');
-	  }
-	  next.children(':first-child').clone().appendTo($(this));
-	  
-	  if (next.next().length>0) {
-	    next.next().children(':first-child').clone().appendTo($(this));
-	  }
-	  else {
-	  	$(this).siblings(':first').children(':first-child').clone().appendTo($(this));
-	  }
+function setupTooltip() {
+	$('a[data-toggle="tooltip"]').tooltip({
+	    animated: 'fade',
+	    placement: 'top',
+	    html: true
 	});
 }
 
 function addDiscardClickFunctions(add=true) {
-	$(CARD_CAROUSEL).find("img").each(function() {
+	$(CARDS_IN_HAND_DIV).find("img").each(function() {
 		var cardName = $(this).attr("alt").split(' ')[0];
 		var uid = $(this).attr("alt").split(' ')[1];
 
@@ -371,9 +359,65 @@ function closeInfoModal() {
 	$(INFO_MODAL).html('');
 }
 
-function closeWaitingModal() {
-	removeBlurFromFullScreen();
-	closeInfoModal();
+function createHardHand(cardInfo) {
+	var minimumCardsForOverlap = 4;
+	var numberOfCards = cardInfo.length;
+
+	var cardsInHandSpanId = "cardsInHandSpan";
+	$(CARDS_IN_HAND_DIV).html("<span id='" + cardsInHandSpanId + "' class='centered centered_text'></span>");
+
+	if (numberOfCards >= minimumCardsForOverlap) {
+		var cardWidth = Math.floor($(CARDS_IN_HAND_DIV).outerWidth() / numberOfCards);
+		var overlapWidth = Math.floor(cardWidth / 5);
+		var cardsWidth = (2 * (cardWidth - overlapWidth)) + ((numberOfCards - 2) * (cardWidth - overlapWidth - overlapWidth));
+	}
+	else {
+		var cardWidth = Math.floor($(CARDS_IN_HAND_DIV).outerWidth() / minimumCardsForOverlap);
+		var overlapWidth = -25;
+		var cardsWidth = (numberOfCards * cardWidth) + ((numberOfCards - 1) * Math.abs(overlapWidth));
+	}
+	
+	var bufferWidth = Math.floor(($(CARDS_IN_HAND_DIV).outerWidth() - cardsWidth) / (numberOfCards >= minimumCardsForOverlap ? 4 : 2));
+	var cardWidthPercent = (cardWidth * 100) / $(CARDS_IN_HAND_DIV).outerWidth();
+	var overlapWidthPercent = (overlapWidth * 100) / $(CARDS_IN_HAND_DIV).outerWidth();
+	var imageLeftXPercent = (bufferWidth * 100) / $(CARDS_IN_HAND_DIV).outerWidth();
+
+	for (var i = 0; i < numberOfCards; i++) {
+		var url = "static/images/cards/actions/" + cardInfo[i].uid.toString() + ".jpg";
+		var img = $('<img class="zoom_hover_' + (numberOfCards >= minimumCardsForOverlap ? "1_5" : "1_1") + '">');
+		img.attr('src', url);
+		img.attr('alt', cardInfo[i].name + " " + cardInfo[i].uid.toString())
+		
+		if (cardInfo[i].isCurrentPlayer) {
+			img.attr('onclick', "playCard(" + cardInfo[i].uid.toString() + ")");
+		}
+
+		img.css({"position": "absolute", "max-width": cardWidthPercent.toString() + '%', "z-index": 10+i, "margin-left": imageLeftXPercent + "%"});
+
+		img.appendTo(CARDS_IN_HAND_DIV);
+		setImageAfterLoading(img);
+
+		imageLeftXPercent += (cardWidthPercent - overlapWidthPercent);
+	}
+
+	var cardText = cardInfo.length > 0 ? "Cards in your hand:" : "You have no cards in your hand."
+	$("#" + cardsInHandSpanId).text(cardText);
+	$("#" + cardsInHandSpanId).css("margin-top", "5%");
+	$("#" + cardsInHandSpanId).addClass("play-text-header");
+}
+
+function setImageAfterLoading(img){
+	window.setTimeout(function() {
+	    if (img.outerHeight() != 0) {
+			var marginTop = Math.floor(($(CARDS_IN_HAND_DIV).outerHeight() - img.outerHeight()) / 4);
+			img.css("bottom", marginTop.toString() + "px");
+			img.show();
+	    }
+	    else {
+	    	img.hide();
+			setImageAfterLoading(img);
+	    }
+	}, 100);
 }
 
 /* Key press functions to enable players to send messages to the server using keyboard strokes. */
