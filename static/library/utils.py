@@ -156,7 +156,7 @@ def createQuestionTuple(recipient, question, options, cardsDrawn=None):
 
 # Tuple to show an unclosable waiting modal for a player.
 def createWaitingModalTuple(player, text):
-	data = {'html': render_template('/modals/unclosable.html', text=text)}
+	data = {'html': render_template('/modals/unclosable.html', text=text, playerIsDead=(not player.isAlive()))}
 	return createEmitTuples(constants.SHOW_WAITING_MODAL, data, [player])[0]
 
 # Tuples to update players' action screens.
@@ -187,7 +187,7 @@ def createEmporioTuples(alivePlayers, cardsLeft, playerPicking):
 			cardImagesTemplate = Markup(render_template('/modals/card_images.html', cards=cardsLeft))
 			text = "{} is currently picking a card:".format(playerPicking.username)
 
-		data = {'html': render_template('/modals/unclosable.html', text=text, header="Emporio", cardsTemplate=cardImagesTemplate)}		
+		data = {'html': render_template('/modals/unclosable.html', text=text, header="Emporio", cardsTemplate=cardImagesTemplate, playerIsDead=(not p.isAlive()))}		
 
 		emitTuples.extend(createEmitTuples(constants.SHOW_INFO_MODAL, dict(data), recipients=[p]))
 
@@ -249,10 +249,6 @@ def consolidateTuples(tuples):
 	tuples = [t for t in tuples if t[0] != constants.UPDATE_CARD_HAND or t in carouselDict.values()]
 	if len(tuples) != originalLen:
 		logServer("Tuples after removing card hand updates: {}".format(tuples))
-
-	# If there are any waiting messages, move them to the back in order to have the info messages show up first.
-	waitingModalTuples = [tup for tup in tuples if tup[0] == constants.SHOW_WAITING_MODAL]
-	tuples = [tup for tup in tuples if tup[0] != constants.SHOW_WAITING_MODAL] + waitingModalTuples
 
 	# Finally, if there are SLEEPs in the tuples, consolidate by removing consecutive ones.
 	if any([tup[0] == constants.SLEEP for tup in tuples]):

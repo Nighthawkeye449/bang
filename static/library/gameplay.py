@@ -316,7 +316,7 @@ class Gameplay(dict):
 			excessCards = player.countExcessCards()
 			if excessCards == 0:
 				utils.logGameplay("{} discarded a card and now has 0 excess cards. Ending their turn.".format(player.getLogString()))
-				emitTuples.append((END_YOUR_TURN, dict(), player))
+				emitTuples.extend(self.startNextTurn(player.username))
 			else:
 				utils.logGameplay("{} discarded a card but still has {} excess card(s). Enabling discard click again.".format(player.getLogString(), excessCards))
 				emitTuples.extend(utils.createDiscardClickTuples(player))
@@ -652,7 +652,7 @@ class Gameplay(dict):
 	# Get the effective distance between 2 players after factoring in eliminated opponents, scopes, and mustangs.
 	def calculateEffectiveDistance(self, player, target):
 		targetIndex = self.getAlivePlayers().index(target)
-		baseDistance = min(targetIndex, len(self.players) - targetIndex)
+		baseDistance = min(targetIndex, len(self.getAlivePlayers()) - targetIndex)
 		result = baseDistance - player.getScopeDistance() + target.getMustangDistance()
 
 		utils.logGameplay("Calculated an effective distance of {} from {} to {}.".format(result, player.username, target.username))
@@ -908,6 +908,7 @@ class Gameplay(dict):
 			
 			self.currentCard = None
 			emitTuples.append(utils.createCardCarouselTuple(player, True))
+			emitTuples.append(utils.createCardsInPlayTuple(player))
 			emitTuples.append(utils.createCardCarouselTuple(target, False))
 
 			emitTuples.extend(self.processSuzyLafayetteAbility(target))
@@ -1021,10 +1022,10 @@ class Gameplay(dict):
 				aliveCount = len(self.getAlivePlayers())
 				isGameOverResult = self.isGameOver()
 				if isGameOverResult != '':
-					emitTuples.extend(utils.createInfoTuples(isGameOverResult, header="Game Over"))
+					emitTuples.extend((GAME_OVER, {'html': render_template("game_over.html", gameOverMsg=isGameOverResult)}, None))
 
 				else: # Emit message to everybody that the player died.
-					deadPlayerText = "You were {}!! You've been eliminated! Better luck next time :(".format(cardEffectString)
+					deadPlayerText = "You were {}! You've been eliminated! Better luck next time :(".format(cardEffectString)
 					otherPlayersText = "{} was {} and has been eliminated! There are now {} players left.".format(player.username, cardEffectString, aliveCount)
 					updateText = "{} was {} and has been eliminated.".format(player.username, cardEffectString)
 

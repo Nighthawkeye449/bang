@@ -117,13 +117,7 @@ $(document).ready(function(){
 			}
 		});
 
-		socket.on('game_start_countdown', function(data) {
-			$("#countdown_span").css("display", "block");
-			$("#countdown_span").text(data.count)			
-		});
-
 		socket.on('start_game', function(data) {
-
 			var xhr = new XMLHttpRequest();
 
 			xhr.onreadystatechange = function() {
@@ -208,6 +202,10 @@ $(document).ready(function(){
 
 		socket.on('discard_click', function(data) {
 			addDiscardClickFunctions();
+		})
+
+		socket.on('game_over', function(data) {
+			loadHtml(data.html);
 		})
 	}
 });

@@ -10,9 +10,17 @@ select {
     -webkit-appearance: none;
 }
 
-@font-face {
-  font-family: Quicksand;
-  src: url('../Quicksand-Regular.otf');
+::placeholder { /* Chrome, Firefox, Opera, Safari 10.1+ */
+  color: red;
+  opacity: 1; /* Firefox */
+}
+
+:-ms-input-placeholder { /* Internet Explorer 10-11 */
+  color: red;
+}
+
+::-ms-input-placeholder { /* Microsoft Edge */
+  color: red;
 }
 
 .outer span {
@@ -51,6 +59,20 @@ select {
 
 .vertical-scroll {
   overflow-y: scroll;
+}
+
+.bang-button {
+  font-family: 'Acme' !important;
+  font-size: 35px !important;
+  color: red !important;
+  background: white !important;
+  border-color: red !important;
+}
+
+.bang-button:hover {
+  color: white !important;
+  background: red !important;
+  border-color: white !important;
 }
 
 /* Home Page */
@@ -93,14 +115,15 @@ select {
     background: rgba(255,255,255,0.15);
 }
 
-.name_input {
-    font-size: 600%;
-    font-family: Quicksand;
-    width: 100%;
+.text_input {
+    font-size: 500%;
+    font-family: 'Acme';
+    width: 50%;
     text-align: center;
-    border-radius: 20px;
+    border-radius: 15px;
     padding-bottom: 1%;
     padding-top: 1%;
+    color: red;
 }
 
 /* Lobby page */

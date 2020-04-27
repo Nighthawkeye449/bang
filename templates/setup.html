@@ -1,4 +1,4 @@
-{% extends "SKELETON.html" %}
+{% extends "skeleton.html" %}
 {% block content %}
 	<body>
 		<div class="outer">
@@ -10,16 +10,16 @@
 				{% endif %}
 				<div>
 					<span id="roleSpan" class="setup-text centered centered_text" style="width: 100%;">Your role is:</span><br>
-					<img src="{{ url_for('static', filename='/images/cards/roles/' + role.lower() + '.jpg') }}" alt="{{ role }} Card" class="game_card zoom_hover_2 centered">
+					<img src="{{ url_for('static', filename='/images/cards/roles/' + role.lower() + '.jpg') }}" alt="{{ role }} Card" class="game_card zoom_hover_2_5 centered">
 				</div>
 				<br><br>
 
 				<div class="centered_text">
 					<span id="characterOptionsSpan" class="setup-text centered centered_text" style="width: 100%;">Your character choices are:</span><br>
 
-					<img src="{{ url_for('static', filename='/images/cards/characters/' + option1.name|convertNameToPath + '.jpg') }}" alt="{{ option1 }} Card" id="option1Card" class="game_card zoom_hover_2 centered_image" onclick="chooseCharacter('{{ option1.name }}', true)">
+					<img src="{{ url_for('static', filename='/images/cards/characters/' + option1.name|convertNameToPath + '.jpg') }}" alt="{{ option1 }} Card" id="option1Card" class="game_card zoom_hover_2_5 centered_image" onclick="chooseCharacter('{{ option1.name }}', true)">
 
-					<img src="{{ url_for('static', filename='/images/cards/characters/' + option2.name|convertNameToPath + '.jpg') }}" alt="{{ option2 }} Card" id="option2Card" class="game_card zoom_hover_2 centered_image" onclick="chooseCharacter('{{ option2.name }}', false)">
+					<img src="{{ url_for('static', filename='/images/cards/characters/' + option2.name|convertNameToPath + '.jpg') }}" alt="{{ option2 }} Card" id="option2Card" class="game_card zoom_hover_2_5 centered_image" onclick="chooseCharacter('{{ option2.name }}', false)">
 				</div>
 				<br><br>
 

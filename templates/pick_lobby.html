@@ -1,0 +1,19 @@
+{% extends "skeleton.html" %}
+{% block content %}
+    <body>
+        <div class="outer">
+            <h1 class="bang-title" style="font-size: 150px;">Bang!</h1>
+            <form action="/lobby" method="POST" class="middle">
+                <div class="inner" style="margin-top: 5%;">
+                    <br><br><span style="font-size: 30px;">Welcome, {{ username }}!</span><br><br>
+                    <input type="submit" class="btn bang-button" value="Create A New Lobby">
+                    <input type="hidden" name="username" value="{{ username }}" />
+                </div>
+                <div class="inner" style="margin-top: 5%;">
+                    <span style="font-size: 30px;">Or, if you want to join an existing lobby, enter the number here:</span>
+                    <input type="text" name="lobby_number" placeholder="Lobby #" class="text_input">
+                </div>
+            </form>
+        </div>
+    </body>
+{% endblock %}

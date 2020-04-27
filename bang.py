@@ -1,3 +1,6 @@
+import eventlet
+eventlet.monkey_patch()
+
 from flask import Flask, request, render_template, make_response, redirect, url_for, session, abort, send_from_directory, jsonify
 from flask_socketio import SocketIO, send, emit, join_room, leave_room
 from signal import signal, SIGINT
@@ -128,11 +131,6 @@ def startGame():
 		if not game['gp'].preparedForSetup:
 			game['gp'].prepareForSetup()
 
-	# for count in range(3, 0, -1):
-	#     emit('game_start_countdown', {'count': str(count)})
-	#     if count > 1:
-	#         time.sleep(2)
-
 	emit(START_GAME)
 
 @socketio.on(SET_CHARACTER)
@@ -240,15 +238,10 @@ def getTooltips(username):
 @app.route("/", methods = ['POST', 'GET'])
 def homePage():
 	with lock:
-		# Don't let a new player join if the game has already started.
-		if game['gp'].started or len(game['gp'].players) == 7:
-			utils.logServer("A player attempted to join the game after it had started.")
-			return render_template('game_started.html')
-
 		# The method will be POST if the text box for username has been submitted.
 		if request.method == 'POST':
 			if 'name' not in request.form or utils.isEmptyOrNull(request.form['name']):
-				utils.logServer("A player attempted to join with invalid username. Reloading home page.")
+				utils.logServer("A player attempted to join with an invalid username. Reloading home page.")
 				return render_template('home.html')
 			
 			# Add this new player if the username is valid.
@@ -256,18 +249,22 @@ def homePage():
 			if not checkUsernameValidity(username):
 				return render_template('home.html', warning_msg="Sorry, that username is invalid! Try something else.")
 			else:
-				utils.logServer("Adding new username {} to the game.".format(username))
-				game['gp'].players[username] = PlayerGame(username)
-
-				sorted_usernames = sorted(game['gp'].players.keys())
-
-				# Broadcast to everybody in the lobby the updated list of players.
-				emit('new_player_in_lobby', {'usernames': sorted_usernames})
-
-				utils.logServer("Rendering lobby for {}".format(username))
-				return render_template('lobby.html', usernames=sorted_usernames, username=username)
+				utils.logServer("Adding new username {}.".format(username))
+				return render_template("pick_lobby.html", username=username)
 
 	return render_template('home.html')
+
+@app.route("/lobby", methods=['POST'])
+def lobby():
+	username = request.form['username']
+	game['gp'].players[username] = PlayerGame(username)
+	sorted_usernames = sorted(game['gp'].players.keys())
+
+	# Broadcast the updated list of players to everybody in this lobby.
+	emit('new_player_in_lobby', {'usernames': sorted_usernames})
+
+	utils.logServer("Rendering lobby for {}".format(username))
+	return render_template('lobby.html', usernames=sorted_usernames, username=username, lobbyNumber=0)
 
 @app.route("/setup", methods = ['POST', 'GET'])
 def setup():
@@ -321,8 +318,4 @@ if __name__ == '__main__':
 
 	app.jinja_env.filters['convertNameToPath'] = jinjafunctions.convertNameToPath
 
-	ip = game['site_variables']['ip'] if 'ip' in game['site_variables'] else "127.0.0.1"
-	port = game['site_variables']['port'] if 'port' in game['site_variables'] else 9999
-	utils.logServer("Site starting on http://" + ip + ":" + str(port))
-
-	socketio.run(app, debug=False, host=ip, port=port)
+	socketio.run(app, debug=True, host="0.0.0.0", port=os.environ.get('PORT'))
