@@ -1,5 +1,5 @@
 {% for p in playerInfoList %}
-    <div id="player_div_{{ p.username }}" class="playerInfoColumn column {{ 'eliminated' if not p.isAlive() }}" style="height: 100%; width: {{ (100 / playerInfoList|length) - 1 }}%;{% if p == playerInfoList[0] %} border-right: 3px black solid; border-top: 3px black solid; {% endif %}">
+    <div id="player_div_{{ p.username }}" class="playerInfoColumn column {{ 'eliminated' if not p.isAlive() }}" style="height: 100%; width: {{ (100 / playerInfoList|length) - 1 }}%;{% if p == playerInfoList[0] %} border-right: 3px white solid; border-top: 3px white solid; {% endif %}">
     	<a data-toggle="tooltip" title="
     	<img style='max-width: 30%' src='{{ url_for('static', filename='/images/cards/actions/flipped_over.jpg')}}' class='centered centered_text'><span> X {{ p.cardsInHand|length }}</span>
     		{% if p.jailStatus == 1 or p.hasTheDynamite() or p.cardsInPlay|length > 0 %}<br><br>{% endif %}
@@ -14,13 +14,13 @@
 	    		</span>
     		{% endif %}<br><br>">
     		<div class="centered_text">
-		        <h2 class="centered_text player-list-usernames" style="display: inline-block;">{{ p.username }}</h2>
-		        {% if p.role == 'Sheriff' %} <img class="centered_text" style='max-width: 12%; display: inline-block; margin-top: -5%' src="{{ url_for('static', filename='/images/badge.png')}}"> {% endif %}
+		        <h2 class="centered_text player-list-usernames" style="display: inline-block; color: white;">{{ p.username }}</h2>
+		        {% if p.role == 'Sheriff' %} <img class="centered_text" style='max-width: 12%; display: inline-block; margin-top: -5%;' src="{{ url_for('static', filename='/images/badge.png')}}"> {% endif %}
 		    </div>
 	        <img id="{{ p.username }}PlayerImage" src="{{ url_for('static', filename='/images/cards/' + ('characters/' if p.isAlive() else 'roles/') + (p.character.name|convertNameToPath if p.isAlive() else p.role.lower()) + '.jpg') }}" alt="{{ p.character.name }}" class="zoom_hover_1_5 centered player_column">
 	        <div class="centered player_column">
 	            {% for _ in range(p.lives) %}
-	                <img src="{{ url_for('static', filename='/images/bullet.png') }}" style="max-width: 17%">
+	                <img src="{{ url_for('static', filename='/images/bullet.png') }}" style="max-width: 17%;">
 	            {% endfor %}
 	        </div>
         </a>

@@ -1,7 +1,8 @@
 /* Universal */
 
 body {
-    background: #dd2d13;
+    color: white !important;
+    background: #313130 !important;
     margin: 0px;
     overflow-x: hidden;
 }
@@ -239,8 +240,8 @@ select {
   height: 50%;
   margin-left: 70%;
   color: black;
-  border-left: 3px black solid;
-  border-bottom: 3px black solid;
+  border-left: 3px white solid;
+  border-bottom: 3px white solid;
 }
 
 .modal-body {
@@ -253,6 +254,7 @@ select {
 
 #updateActionList {
   font-size: 17px;
+  color: white;
 }
 
 .play-text-header {
@@ -266,4 +268,8 @@ select {
   bottom: 1%;
   right: 1%;
   color: red
+}
+
+#info_modal, #question_modal {
+  color: black;
 }
