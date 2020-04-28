@@ -130,6 +130,9 @@ class Gameplay(dict):
 		elif username != self.getCurrentPlayerName():
 			utils.logError("{} shouldn't be able to end the current turn (the current player is {}).".format(username, self.getCurrentPlayerName()))
 			return []
+		elif self.currentCard != None:
+			utils.logGameplay("{} tried to end their turn but the current card ({}) is still being processed.".format(username, self.currentCard))
+			return utils.createInfoTuples("You can't end your turn while the {} is still being played!".format(self.currentCard.getDisplayName()), recipients=[self.players[username]])
 
 		emitTuples = []
 
@@ -161,9 +164,6 @@ class Gameplay(dict):
 			player = self.playerOrder[0]
 			emitTuples.append(self.appendUpdate("{} started their turn.".format(player.username)))
 
-			if self.currentTurn > 0:
-				emitTuples.append((SLEEP, 0.5, None)) # Pause for half a second in between every turn.
-			
 			drawTuples = self.processSpecialCardDraw(player)
 
 			# If the player is:
@@ -354,6 +354,11 @@ class Gameplay(dict):
 			utils.logError("{} tried to play {} ({}) but doesn't have it in his/her hand.".format(username, card.getDeterminerString(), uid))
 			return []
 
+		# If the card clicking erroneously somehow allows the player to play a card while s/he's discarding, just discard from here.
+		elif self.discardingCards:
+			utils.logError("{} is discarding but entered card validation anyway. Discarding card {} from here.".format(player.getLogString(), uid))
+			return self.playerDiscardingCard(username, uid)
+
 		if self.currentCard != None:
 			return utils.createInfoTuples("Slow down! We're still waiting for your {} to get finished.".format(self.currentCard.getDisplayName()), recipients=[player])
 
@@ -402,8 +407,6 @@ class Gameplay(dict):
 			else:
 				emitTuples = [self.getQuestionModalWithAliveOpponents(player, QUESTION_WHO_TO_DUEL)]
 
-			
-
 		elif card.name == BIRRA:
 			if len(self.getAlivePlayers()) == 2:
 				response = "You can't use Birras when it's 1-v-1!"
@@ -424,10 +427,10 @@ class Gameplay(dict):
 			elif card.cardtype == GUN_CARD and GUN_CARD in [c.cardtype for c in player.cardsInPlay]:
 				response = OK_MSG
 				currentGun = utils.getUniqueItem(lambda c: c.cardtype == GUN_CARD, player.cardsInPlay)
-				emitTuples = [self.addQuestion(player, QUESTION_REPLACE_GUN, [KEEP_GUN.format(currentGun.getDisplayName()), REPLACE_GUN.format(currentGun.getDisplayName(), card.getDisplayName())])]
+				emitTuples = [self.addQuestion(player, QUESTION_REPLACE_GUN, [REPLACE_GUN.format(currentGun.getDisplayName(), card.getDisplayName()), NEVER_MIND])]
 			elif len(player.cardsInPlay) == 2:
 				response = OK_MSG
-				emitTuples = [self.addQuestion(player, QUESTION_IN_PLAY, ["Replace the {}.".format(c.getQuestionString()) for c in player.cardsInPlay] + [KEEP_CURRENT_CARDS])]
+				emitTuples = [self.addQuestion(player, QUESTION_IN_PLAY, ["Replace the {}.".format(c.getQuestionString()) for c in player.cardsInPlay] + [NEVER_MIND])]
 			else:
 				response = OK_MSG
 
@@ -753,6 +756,11 @@ class Gameplay(dict):
 		del self.unansweredQuestions[username] # This player has answered his/her question, so it can be discarded.
 		self.playersWaitingFor.remove(player.username)
 
+		# If the player said "Never mind", just cancel the current card.
+		if answer == NEVER_MIND:
+			self.currentCard = None
+			return []
+
 		# Handle the responses for characters who have special start-of-turn draws. 
 		if self.drawingToStartTurn:
 			if player.character.name in [JESSE_JONES, KIT_CARLSON, PEDRO_RAMIREZ]:
@@ -854,19 +862,15 @@ class Gameplay(dict):
 
 			# Handle the case where a player wants to play a new blue card but already has 2 cards in play.
 			elif question == QUESTION_IN_PLAY:
-				if answer == KEEP_CURRENT_CARDS:
-					self.currentCard = None
-				
-				else: # The answer should match the QUESTION_CARD_FORMAT format with a "Replace the " prepended to it and a period at the end.
-					answer = answer.replace("Replace the ", "")[:-1]
-					name, value, suit = utils.getReverseFormat(QUESTION_CARD_FORMAT, answer)
-					name = utils.convertDisplayNameToRaw(name)
-					cardToDiscard = utils.getUniqueItem(lambda card: (name, suit, value) == (card.name, card.suit, card.value), player.cardsInPlay)
-					emitTuples.extend(self.replaceInPlayCard(player, cardToDiscard))
+				answer = answer.replace("Replace the ", "")[:-1]
+				name, value, suit = utils.getReverseFormat(QUESTION_CARD_FORMAT, answer)
+				name = utils.convertDisplayNameToRaw(name)
+				cardToDiscard = utils.getUniqueItem(lambda card: (name, suit, value) == (card.name, card.suit, card.value), player.cardsInPlay)
+				emitTuples.extend(self.replaceInPlayCard(player, cardToDiscard))
 
 			# Handle player deciding what to do when a gun is already in play.
 			elif question == QUESTION_REPLACE_GUN:
-				if "Discard" in answer: # Meaning to replace the current gun.
+				if utils.getReverseFormat(REPLACE_GUN, answer) != None: # Meaning to replace the current gun.
 					inPlayGun = utils.getUniqueItem(lambda card: card.cardtype == GUN_CARD, player.cardsInPlay)
 					emitTuples.extend(self.replaceInPlayCard(player, inPlayGun))
 				else:
@@ -1017,12 +1021,12 @@ class Gameplay(dict):
 		if not player.isAlive():
 			requiredBirras = abs(player.lives) + 1
 			birrasInHand = player.getCardTypeFromHand(BIRRA)
-			if len(birrasInHand) < requiredBirras: # Without enough Birras, the player is eliminated.
+			if len(birrasInHand) < requiredBirras or len(self.getAlivePlayers()) == 1: # Without enough Birras, or if it's 1-v-1, the player is eliminated.
 				player.lives = 0
 				aliveCount = len(self.getAlivePlayers())
 				isGameOverResult = self.isGameOver()
 				if isGameOverResult != '':
-					emitTuples.extend((GAME_OVER, {'html': render_template("game_over.html", gameOverMsg=isGameOverResult)}, None))
+					emitTuples.append((GAME_OVER, {'html': render_template("game_over.html", gameOverMsg=isGameOverResult)}, None))
 
 				else: # Emit message to everybody that the player died.
 					deadPlayerText = "You were {}! You've been eliminated! Better luck next time :(".format(cardEffectString)
@@ -1072,14 +1076,14 @@ class Gameplay(dict):
 							for c in attacker.cardsInPlay + attacker.cardsInHand:
 								self.discardCard(attacker, c)
 
-							infoText = "You eliminated one of your Vices, so you have to discard all your cards!"
-							updateText = "{} is the Sheriff and eliminated a Vice, so they have to discard all their cards.".format(attacker.username)
+							infoText = "You eliminated one of your Vices, so you had to discard all your cards!"
+							updateText = "{} discarded all their cards for eliminating a Vice as the Sheriff.".format(attacker.username)
 
 						else:
 							self.drawCardsForPlayer(attacker, 3)
 
-							infoText = "You eliminated an Outlaw, so you drew 3 cards!"
-							updateText = "{} eliminated an Outlaw, so they drew 3 cards.".format(attacker.username)
+							infoText = "You drew 3 cards for eliminating an Outlaw!"
+							updateText = "{} drew 3 cards for eliminating an Outlaw.".format(attacker.username)
 
 						emitTuples.extend(utils.createInfoTuples(infoText, recipients=[attacker]))
 						emitTuples.append(self.appendUpdate(updateText))
@@ -1129,7 +1133,7 @@ class Gameplay(dict):
 				emitTuples.append(utils.createCardCarouselTuple(player, player == self.playerOrder[0]))
 				emitTuples.append(utils.createDiscardTuple(self.getTopDiscardCard()))
 				emitTuples.extend(utils.createInfoTuples("You drew {} because you lost {}!".format(cardString, lostLivesString), recipients=[player]))
-				emitTuples.append(self.appendUpdate("{} drew {} using Bart Cassidy's ability because they lost {}.".format(player.username, cardString, lostLivesString)))
+				emitTuples.append(self.appendUpdate("{} drew {} using Bart Cassidy's ability".format(player.username, cardString)))
 
 			elif player.character.name == EL_GRINGO and self.playerOrder[0] != player and attacker != None: # El Gringo draws a card from the player's hand anytime a player deals him damage.
 				if len(attacker.cardsInHand) > 0:
@@ -1481,7 +1485,7 @@ class Gameplay(dict):
 
 	def getQuestionModalWithAliveOpponents(self, player, question):
 		aliveOpponents = self.getAliveOpponents(player.username)
-		return self.addQuestion(player, question, [p.username for p in aliveOpponents])
+		return self.addQuestion(player, question, [p.username for p in aliveOpponents] + [NEVER_MIND])
 
 	def getAlivePlayers(self):
 		players = [p for p in self.playerOrder if p.isAlive()]
@@ -1597,12 +1601,13 @@ class Gameplay(dict):
 				utils.logGameplay("{} didn't draw a heart for Barile against the {}".format(player.getLogString(), effectiveDisplayName))
 				emitTuples = [self.appendUpdate("{} tried to avoid the {} with a Barile but didn't draw a heart{}.".format(player.username, effectiveDisplayName, " either time" if jourdonnaisTriedTwice else ""))]
 				
-				# The Barile wasn't a heart, so check if a Mancato can still be played to avoid the attack.
+				# The Barile wasn't a heart, so check if a Mancato can still be played to avoid the attack. Otherwise, automatically take the hit.
 				if self.currentCard.name == BANG: emitTuples.append(utils.createWaitingModalTuple(currentPlayer, "Waiting for {} to decide how to react to {} after not drawing a Heart for Barile...".format(player.username, self.currentCard.getDisplayName())))
 				if len(player.getCardTypeFromHand(MANCATO)) > 0:
 					emitTuples.append(self.addQuestion(player, QUESTION_BARILE_MANCATO.format(currentPlayer.username, effectiveDisplayName), [PLAY_A_MANCATO, LOSE_A_LIFE]))
 				else:
 					emitTuples.extend(utils.createInfoTuples("You didn't draw a heart for Barile.", recipients=[player]))
+					emitTuples.append((SLEEP, AUTOMATIC_SLEEP_DURATION, None))
 					emitTuples.extend(self.processPlayerTakingDamage(player, attacker=currentPlayer))
 		
 		# Handle the case where Slab the Killer used a Bang, so either 1 or 2 Mancatos still need to be played.

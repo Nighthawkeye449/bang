@@ -132,12 +132,29 @@ select {
   margin: 0 auto;
   position: relative;
   font-family: 'Acme';
-  font-size: 30px;
+  font-size: 25px;
 }
 
 #lobby-title {
+  margin-top: 5%;
   width: 100%;
   left: 0px;
+}
+
+#leave-lobby-button {
+  font-family: 'Acme' !important;
+  font-size: 25px !important;
+  position: absolute;
+  bottom: 1%;
+  right: 1%;
+  color: white !important;
+  background: black !important;
+  margin-top: 5% !important;
+  border: 2px solid white;  
+}
+
+#leave-lobby-button:hover {
+  border: 2px solid red;  
 }
 
 /* Setup page */
@@ -221,8 +238,9 @@ select {
   width: 30%;
   height: 50%;
   margin-left: 70%;
-  background: black;
-  color: white;
+  color: black;
+  border-left: 3px black solid;
+  border-bottom: 3px black solid;
 }
 
 .modal-body {
@@ -239,4 +257,13 @@ select {
 
 .play-text-header {
   font-size: 20px;
+}
+
+#usernameSpan {
+  font-family: "Acme";
+  font-size: 25px;
+  position: absolute;
+  bottom: 1%;
+  right: 1%;
+  color: red
 }

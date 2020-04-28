@@ -11,7 +11,8 @@ var BOTTOM_HALF = "#bottomHalfDiv"
 var CARDS_IN_HAND_DIV = "#cardsInHandDiv"
 var CARDS_IN_PLAY_DIV = "#cardsInPlayDiv";
 var DISCARD_DIV = "#discardCardDiv";
-var WAITING_FOR_SPAN = "#waitingForSpan"
+var WAITING_FOR_SPAN = "#waitingForSpan";
+var LOBBY_USERNAMES = "#lobby_usernames";
 
 var cardsAreBlurred = false;
 var keysPressed = {};
@@ -87,8 +88,10 @@ $(document).ready(function(){
 				$(QUESTION_MODAL).dialog({
 					dialogClass: "no-close",
 					resizable: false,
+					autoResize: true,
 					height: "auto",
-					width: 700,
+					width: "auto",
+					minHeight: 0,
 					modal: true,
 					buttons: d
 		    	});
@@ -101,7 +104,7 @@ $(document).ready(function(){
 
 		/* Socket functions for waiting in the lobby. */
 
-		socket.on('new_player_in_lobby', function(data) {
+		socket.on('lobby_player_update', function(data) {
 			players = data.usernames;
 			lobby_players_list_string = '';
 
@@ -109,12 +112,19 @@ $(document).ready(function(){
 			for (var i = 0; i < players.length; i++) {
 				lobby_players_list_string = lobby_players_list_string + '<li>' + players[i].toString() + '</li>';
 			}
-			$('#lobby_usernames').html(lobby_players_list_string);
+			$(LOBBY_USERNAMES).html(lobby_players_list_string);
 
 			// Once enough players are in the game, show the start button.
 			if (players.length >= 4 && players.length <= 7 && username == players[0]) {
 				$("#start_button").css("display", "block");
 			}
+			else {
+				$("#start_button").css("display", "none");	
+			}
+		});
+
+		socket.on('reload_lobby', function(data) {
+			loadHtml(data.html);
 		});
 
 		socket.on('start_game', function(data) {
@@ -233,6 +243,12 @@ function startButtonClick() {
 	socket.emit('start_button_clicked');
 }
 
+function leaveLobby() {
+	if (confirm("Are you sure you want to leave the lobby?")) {
+		socket.emit('leave_lobby', username);
+	}
+}
+
 function chooseCharacter(character, isOption1) {
 	if (confirm("Are you sure you want to play as " + character + "?")) {
 		$("#option1Card").removeAttr("onClick");
@@ -257,6 +273,9 @@ function loadPlayPage(data) {
 }
 
 function showInfoModal(html) {
+	// Do nothing if the question modal is already open.
+	if ($(QUESTION_MODAL).is(':visible')) { return; }
+
 	// If the modals can be combined, just combine them.
 	var eitherModalIsWaiting = waitingModalIsOpen() || html.includes("Waiting");
 	if ($(INFO_MODAL).is(':visible') && !eitherModalIsWaiting && !(html.includes("Emporio"))) {
@@ -280,6 +299,10 @@ function showInfoModal(html) {
 		closeInfoModal();
 		$(INFO_MODAL).html(html);
 		$(INFO_MODAL).modal('show');
+
+		$(INFO_MODAL).draggable({
+		    handle: ".modal-header"
+		}); 
 	}
 }
 
@@ -334,17 +357,12 @@ function setupTooltip() {
 	});
 }
 
-function addDiscardClickFunctions(add=true) {
+function addDiscardClickFunctions() {
 	$(CARDS_IN_HAND_DIV).find("img").each(function() {
 		var cardName = $(this).attr("alt").split(' ')[0];
 		var uid = $(this).attr("alt").split(' ')[1];
 
-		if (add) {
-			$(this).attr("onClick", "discardCard(" + uid + ")" );
-		}
-		else {
-			$(this).removeAttr("onClick");
-		}
+		$(this).attr("onClick", "discardCard(" + uid + ")" );
 	});
 }
 
@@ -400,7 +418,7 @@ function createHardHand(cardInfo) {
 
 	var cardText = cardInfo.length > 0 ? "Cards in your hand:" : "You have no cards in your hand."
 	$("#" + cardsInHandSpanId).text(cardText);
-	$("#" + cardsInHandSpanId).css("margin-top", "5%");
+	$("#" + cardsInHandSpanId).css("margin-top", "3%");
 	$("#" + cardsInHandSpanId).addClass("play-text-header");
 }
 
@@ -423,7 +441,7 @@ function setImageAfterLoading(img){
 $(document).keydown(function (e) {
     keysPressed[e.which] = true;
 
-    if (16 in keysPressed && 69 in keysPressed) { // Shift-E, to end the turn.
+    if (16 in keysPressed && 69 in keysPressed && e.which == 69) { // Shift-E, to end the turn.
     	socket.emit('ending_turn', username);
     }
 

@@ -5,7 +5,9 @@
         	<h1 class="bang-title" style="font-size: 200px; margin-top: 0%; position: relative">Bang!</h1>
 
         	<div style="position: relative; display: table; margin: 0 auto">
-        		<span id="lobby-title" class="lobby-text centered_text" style="font-size: 60px">Lobby <span style="text-decoration: underline;">{{ lobbyNumber }}</span></span><br><br>
+        		<span id="lobby-title" class="lobby-text centered_text" style="font-size: 40px">Lobby <span style="text-decoration: underline;">{{ lobbyNumber }}</span></span>
+        		<br>
+        		<br><br>
         		<span id="lobby-title" class="lobby-text centered_text">In this lobby:</span>
 					<ul id="lobby_usernames" class="lobby-text" style="margin: 0 auto;">
 					{% for name in usernames %}
@@ -13,9 +15,9 @@
 					{% endfor %}
 					</ul>
 					<button type="button" id="start_button" class="btn btn-danger bang-button" style="display: {{ 'block' if usernames|length >= 4 and usernames|length <= 7 and username == usernames[0] else 'none' }}; margin-top: 5%;" onclick="startButtonClick()">Let's bang!</button>
-				<span id="countdown_span" style="display: none"></span>
 			</div>
 
         </div>
+	    <button id="leave-lobby-button" class="btn btn-danger" type="button" onclick="leaveLobby()">Leave This Lobby</button>
     </body>
 {% endblock %}

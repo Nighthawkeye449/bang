@@ -86,7 +86,8 @@ def validResponseTime(username):
 def emit(emitString, args=None, recipient=None):
 	if args != None and recipient != None:
 		socketio.emit(emitString, args, room=recipient.sid)
-		utils.logServer("Emitted socket message '{}' to {} with args {}.".format(emitString, recipient.username, args))
+		if emitString != UPDATE_PLAYER_LIST:
+			utils.logServer("Emitted socket message '{}' to {} with args {}.".format(emitString, recipient.username, args))
 	elif args != None:
 		socketio.emit(emitString, args)
 		utils.logServer("Emitted socket message '{}' to everybody with args {}.".format(emitString, args))
@@ -122,7 +123,22 @@ SOCKET_MESSAGE_TIMESTAMPS = dict()
 def connectUsernameToSid(username):
 	utils.logServer("Received socket message '{}' from {}.".format(CONNECTED, username))
 	with lock:
+		game['gp'].players[username] = PlayerGame(username)
 		game['gp'].players[username].sid = request.sid
+
+@socketio.on(LEAVE_LOBBY)
+def leaveLobby(username):
+	sid = game['gp'].players[username].sid
+	
+	del game['gp'].players[username]
+	sorted_usernames = sorted(game['gp'].players.keys())
+
+	# Broadcast the updated list of players to everybody else in this lobby.
+	emit(LOBBY_PLAYER_UPDATE, {'usernames': sorted_usernames}, None)
+
+	# Reload the pick lobby page for the player who left.
+	socketio.emit(RELOAD_LOBBY, {'html': render_template("pick_lobby.html", username=username)}, room=sid)
+
 
 @socketio.on(START_BUTTON_CLICKED)
 def startGame():
@@ -228,7 +244,6 @@ def specialAbility(username):
 
 @socketio.on(REQUEST_PLAYER_LIST)
 def getTooltips(username):
-	utils.logServer("Received socket message '{}' from {}.".format(REQUEST_PLAYER_LIST, username))
 	with lock:
 		tuples = game['gp'].getPlayerList(username)
 	emitTuples(tuples)
@@ -257,11 +272,10 @@ def homePage():
 @app.route("/lobby", methods=['POST'])
 def lobby():
 	username = request.form['username']
-	game['gp'].players[username] = PlayerGame(username)
 	sorted_usernames = sorted(game['gp'].players.keys())
 
 	# Broadcast the updated list of players to everybody in this lobby.
-	emit('new_player_in_lobby', {'usernames': sorted_usernames})
+	emit(LOBBY_PLAYER_UPDATE, {'usernames': sorted_usernames}, None)
 
 	utils.logServer("Rendering lobby for {}".format(username))
 	return render_template('lobby.html', usernames=sorted_usernames, username=username, lobbyNumber=0)
@@ -313,6 +327,8 @@ def checkUsernameValidity(username):
 
 # Start Server
 if __name__ == '__main__':
+
+	utils.resetLogs()
 
 	signal(SIGINT, handler)
 

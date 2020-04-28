@@ -37,6 +37,12 @@ def logGameplay(msg):
 def logError(msg):
 	log("ERROR: {}".format(msg), "error")
 
+def resetLogs():
+	for file in ["server", "player", "gameplay", "error"]:
+		path = getLocalFilePath("./logs/{}.txt".format(file))
+		with open(path, "w") as f:
+			f.truncate(0)
+
 def loadCards():
 	cardList = list()
 	with open(getLocalFilePath("./static/json/cards.json")) as p:
@@ -256,7 +262,7 @@ def consolidateTuples(tuples):
 			if tuples[i][0] == constants.SLEEP and tuples[i+1][0] == constants.SLEEP:
 				tuples.pop(i+1)
 				newTuple = (constants.SLEEP, max(tuples[i][1], 1), None) 
-				tuples[i] = newTuple # Set the remaining sleep to 1 second at most.
+				tuples[i] = newTuple # Set the remaining sleep to 1 second at least.
 		
 		logServer("Consolidated SLEEPS in the tuples: {}".format(tuples))
 
