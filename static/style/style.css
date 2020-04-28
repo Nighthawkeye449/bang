@@ -201,9 +201,9 @@ select {
   transform: scale(1.5);
 }
 
-.zoom_hover_1_1:hover {
+.zoom_hover_1_2:hover {
   z-index: 50 !important;
-  transform: scale(1.1);
+  transform: scale(1.2);
 }
 
 .blur {
@@ -242,10 +242,6 @@ select {
   color: black;
   border-left: 3px white solid;
   border-bottom: 3px white solid;
-}
-
-.modal-body {
-    max-width: 1500px;
 }
 
 #updateActionList, .player-list-usernames {

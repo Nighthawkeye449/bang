@@ -38,7 +38,7 @@
             <div id="bottomHalfDiv" class="row">
                 {{ playerInfoListTemplate }}
             </div>
+            <span id="usernameSpan" {% if player == playerInfoList[0] %} onclick="socket.emit('ending_turn', username);" {% endif %}>{{ player.username }}<span>
         </div>
-    <span id="usernameSpan">{{ player.username }}<span>
     </body>
 {% endblock %}

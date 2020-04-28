@@ -430,7 +430,7 @@ class Gameplay(dict):
 				emitTuples = [self.addQuestion(player, QUESTION_REPLACE_GUN, [REPLACE_GUN.format(currentGun.getDisplayName(), card.getDisplayName()), NEVER_MIND])]
 			elif len(player.cardsInPlay) == 2:
 				response = OK_MSG
-				emitTuples = [self.addQuestion(player, QUESTION_IN_PLAY, ["Replace the {}.".format(c.getQuestionString()) for c in player.cardsInPlay] + [NEVER_MIND])]
+				emitTuples = [self.addQuestion(player, QUESTION_IN_PLAY, ["Replace the {}".format(c.getQuestionString()) for c in player.cardsInPlay] + [NEVER_MIND])]
 			else:
 				response = OK_MSG
 
@@ -573,6 +573,8 @@ class Gameplay(dict):
 			elif card.name == PRIGIONE:
 				target.jailStatus = 1
 				target.specialCards.append(card)
+				if len(self.getAllValidTargetsForCard(player, PRIGIONE)) == 1:
+					emitTuples.extend(utils.createInfoTuples("You automatically put {} in jail.".format(target.username), recipients=[player]))
 				emitTuples.extend(utils.createInfoTuples("{} just put you in jail!".format(player.username), recipients=[target]))
 				emitTuples.append(self.appendUpdate("{} put {} in jail.".format(player.username, target.username)))
 				self.currentCard = None
@@ -912,7 +914,7 @@ class Gameplay(dict):
 			
 			self.currentCard = None
 			emitTuples.append(utils.createCardCarouselTuple(player, True))
-			emitTuples.append(utils.createCardsInPlayTuple(player))
+			emitTuples.append(utils.createCardsInPlayTuple(target))
 			emitTuples.append(utils.createCardCarouselTuple(target, False))
 
 			emitTuples.extend(self.processSuzyLafayetteAbility(target))
@@ -1133,7 +1135,7 @@ class Gameplay(dict):
 				emitTuples.append(utils.createCardCarouselTuple(player, player == self.playerOrder[0]))
 				emitTuples.append(utils.createDiscardTuple(self.getTopDiscardCard()))
 				emitTuples.extend(utils.createInfoTuples("You drew {} because you lost {}!".format(cardString, lostLivesString), recipients=[player]))
-				emitTuples.append(self.appendUpdate("{} drew {} using Bart Cassidy's ability".format(player.username, cardString)))
+				emitTuples.append(self.appendUpdate("{} drew {} using Bart Cassidy's ability.".format(player.username, cardString)))
 
 			elif player.character.name == EL_GRINGO and self.playerOrder[0] != player and attacker != None: # El Gringo draws a card from the player's hand anytime a player deals him damage.
 				if len(attacker.cardsInHand) > 0:
@@ -1153,7 +1155,8 @@ class Gameplay(dict):
 				else:
 					emitTuples.extend(utils.createInfoTuples("{} has no cards, so you couldn't use El Gringo's ability to steal anything.".format(attacker.username), recipients=[player]))
 
-		emitTuples.append(utils.createPlayerInfoListTuple(self.playerOrder)) # Update each player's information on everyone's screen.
+		if self.isGameOver == '':
+			emitTuples.append(utils.createPlayerInfoListTuple(self.playerOrder)) # Update each player's information on everyone's screen.
 
 		# Only reset the current card once its effects are finished, i.e. once every player has finished reacting to everything.
 		if self.currentCardCanBeReset():
@@ -1811,4 +1814,7 @@ class Gameplay(dict):
 		return emitTuples
 
 	def getPlayerList(self, username):
-		return [utils.createPlayerInfoListTuple(self.playerOrder, self.players[username])]
+		if self.isGameOver() == '' and (self.currentCard == None or self.currentCardCanBeReset()):
+			return [utils.createPlayerInfoListTuple(self.playerOrder, self.players[username])]
+		else:
+			return []

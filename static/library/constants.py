@@ -83,7 +83,7 @@ FROM_THE_DECK = "From the deck"
 FROM_ANOTHER_PLAYER = "From another player"
 FROM_DISCARD = "From the discard pile"
 FROM_THEIR_HAND = "From their hand"
-FROM_THE_TABLE = "From their cards on the table"
+FROM_THE_TABLE = "From their card(s) on the table"
 PLAY_A_BANG = "Play a Bang"
 PLAY_A_MANCATO = "Play a Mancato"
 PLAY_TWO_MANCATOS = "Play 2 Mancatos"
@@ -112,6 +112,7 @@ SLEEP = "sleep"
 GAME_OVER = "game_over"
 
 # Constants for incoming socket message names.
+KEEP_ALIVE = "keep_alive"
 CONNECTED = "connected"
 LEAVE_LOBBY = "leave_lobby"
 START_BUTTON_CLICKED = "start_button_clicked"
@@ -143,4 +144,4 @@ OK_MSG = "OK"
 EMPTY_RESPONSE = ('', 204)
 FLIPPED_OVER = "flipped_over"
 CARD_IMAGES_PATH = "static/images/cards/actions/{}.jpg"
-AUTOMATIC_SLEEP_DURATION = 3
+AUTOMATIC_SLEEP_DURATION = 4

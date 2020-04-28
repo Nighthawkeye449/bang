@@ -1,14 +1,7 @@
-{% extends "skeleton.html" %}
-{% block content %}
-	<body>
-		<div class="outer">
-			<h1 class="bang-title" style="font-size: 100px; margin-top: 0%; position: relative">Bang!</h1>
-			<div style="position: relative; display: table; margin: 0 auto">
-				<div>
-					<span class="setup-text centered centered_text" style="width: 100%; font-size: 200px;">GAME OVER</span><br>
-					<span class="setup-text centered centered_text" style="width: 100%; font-size: 100px;">{{ gameOverMsg }}</span><br>
-				</div>
-			</div>
-		</div>
-	</body>
-{% endblock %}
+<h1 class="bang-title" style="font-size: 100px; margin-top: 0%; position: relative">Bang!</h1>
+<div style="position: relative; display: table; margin: 0 auto">
+	<div>
+		<span class="setup-text centered centered_text" style="width: 100%; font-size: 175px;">GAME OVER</span><br>
+		<span class="setup-text centered centered_text" style="width: 100%; font-size: 100px; color: red">{{ gameOverMsg }}</span><br>
+	</div>
+</div>

@@ -14,9 +14,10 @@
 						<li>{{ name }}</li> 
 					{% endfor %}
 					</ul>
-					<button type="button" id="start_button" class="btn btn-danger bang-button" style="display: {{ 'block' if usernames|length >= 4 and usernames|length <= 7 and username == usernames[0] else 'none' }}; margin-top: 5%;" onclick="startButtonClick()">Let's bang!</button>
 			</div>
-
+			<div style="position: relative; display: table; margin: 0 auto">
+				<button type="button" id="start_button" class="btn btn-danger bang-button" style="display: {{ 'block' if usernames|length >= 4 and usernames|length <= 7 and username == usernames[0] else 'none' }}; margin-top: 5%;" onclick="startButtonClick()">Let's bang!</button>
+			</div>
         </div>
 	    <button id="leave-lobby-button" class="btn btn-danger" type="button" onclick="leaveLobby()">Leave This Lobby</button>
     </body>

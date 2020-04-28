@@ -119,6 +119,10 @@ SOCKET_MESSAGE_TIMESTAMPS = dict()
 
 #################### Socket IO functions ####################
 
+@socketio.on(KEEP_ALIVE)
+def keepAlive(username):
+	socketio.emit(KEEP_ALIVE, dict(), room=request.sid)
+
 @socketio.on(CONNECTED)
 def connectUsernameToSid(username):
 	utils.logServer("Received socket message '{}' from {}.".format(CONNECTED, username))
@@ -243,7 +247,7 @@ def specialAbility(username):
 		emitTuples(game['gp'].useSpecialAbility(username))
 
 @socketio.on(REQUEST_PLAYER_LIST)
-def getTooltips(username):
+def requestPlayerList(username):
 	with lock:
 		tuples = game['gp'].getPlayerList(username)
 	emitTuples(tuples)

@@ -22,9 +22,13 @@ $(document).ready(function(){
 	// Connect to the socket server.
 	username = document.getElementById("username").textContent;
 
+	window.history.pushState({}, '', '/');
+
 	if (username.length > 0) {
 		socket = io.connect('http://' + document.domain + ':' + location.port + '/', { forceNew: true });
 		socket.emit('connected', username);
+
+		setInterval(function() { socket.emit('keep_alive', username); }, 5000);
 
 		/* Socket functions for showing the modals. */
 
@@ -215,7 +219,7 @@ $(document).ready(function(){
 		})
 
 		socket.on('game_over', function(data) {
-			loadHtml(data.html);
+			$(".outer").html(data.html);
 		})
 	}
 });
@@ -224,7 +228,9 @@ $(document).ready(function(){
 
 function loadHtml(html) {
 	document.body.innerHTML = "";
+	console.log(html);
 	window.document.write(html);
+	console.log(window.document);
 }
 
 function isNullOrUndefined(obj) {
@@ -400,7 +406,7 @@ function createHardHand(cardInfo) {
 
 	for (var i = 0; i < numberOfCards; i++) {
 		var url = "static/images/cards/actions/" + cardInfo[i].uid.toString() + ".jpg";
-		var img = $('<img class="zoom_hover_' + (numberOfCards >= minimumCardsForOverlap ? "1_5" : "1_1") + '">');
+		var img = $('<img class="zoom_hover_' + (numberOfCards >= minimumCardsForOverlap ? "1_5" : "1_2") + '">');
 		img.attr('src', url);
 		img.attr('alt', cardInfo[i].name + " " + cardInfo[i].uid.toString())
 		
