@@ -7,8 +7,10 @@ from signal import signal, SIGINT
 from threading import Lock
 import json
 import os
+import random
 import sys
 import time
+
 
 # Import local modules.
 from static.library import jinjafunctions
@@ -113,7 +115,8 @@ socketio = SocketIO(app)
 
 lock = Lock()
 
-game = resetGame()
+userLobbyDic = {}
+lobbyGameDic = {}
 
 SOCKET_MESSAGE_TIMESTAMPS = dict()
 
@@ -275,14 +278,31 @@ def homePage():
 
 @app.route("/lobby", methods=['POST'])
 def lobby():
-	username = request.form['username']
-	sorted_usernames = sorted(game['gp'].players.keys())
 
+	username = request.form['username']
+
+	if not utils.isEmptyOrNull(request.form['lobby_number']):
+		if not request.form['lobby_number'] in lobbyGameDic:
+			return render_template('pick_lobby.html', warning_msg="Sorry, that lobby couldn't be found.")
+
+		if request.form['lobby_number'] in lobbyGameDic:
+			return render_template('lobby.html', usernames=sorted_usernames, username=username, lobbyNumber=request.form['lobby_number'])
+
+	# is this the right way to request from the button?
+	if request.form['submit-button']:
+		lobbyNumber = random.randint(1111,9999)
+		while lobbyNumber in lobbyGameDic:
+			lobbyNumber = random.randint(1111,9999)
+		lobbyGameDic[lobbyNumber] = resetGame()
+		userLobbyDic[username] = lobbyNumber #link the username to the lobby number
+
+	sorted_usernames = sorted(game['gp'].players.keys())
+	
 	# Broadcast the updated list of players to everybody in this lobby.
 	emit(LOBBY_PLAYER_UPDATE, {'usernames': sorted_usernames}, None)
 
 	utils.logServer("Rendering lobby for {}".format(username))
-	return render_template('lobby.html', usernames=sorted_usernames, username=username, lobbyNumber=0)
+	return render_template('lobby.html', usernames=sorted_usernames, username=username, lobbyNumber=userLobbyDic[username])
 
 @app.route("/setup", methods = ['POST', 'GET'])
 def setup():
