@@ -115,7 +115,7 @@ class PlayerGame(dict):
 
 	def countExcessCards(self):
 		excess = max(len(self.cardsInHand) - self.lives, 0)
-		utils.logPlayer("Counting excess cards for {} (cards: {}) (lives: {}): {}".format(self.getLogString(), self.cardsInHand, self.lives, excess))
+		utils.logPlayer("Counting excess cards for {} (cards: {}) (lives: {}): {}".format(self.getLogString(), [c.name for c in self.cardsInHand], self.lives, excess))
 		return excess
 
 	def panico(self, card=None): # The card parameter would only be used if a specific card from in-play is being taken.

@@ -41,20 +41,21 @@ def loadGame():
 def log(msg, file):
 	if "html" not in msg:
 		print("{}: {}".format(file.upper(), msg))
-	# with open(getLocalFilePath("./logs/{}.txt".format(file)), 'a+') as f:
-	# 	time = datetime.datetime.today().strftime("%d-%B-%Y %H:%M:%S")
-	# 	stack = [s[3] for s in inspect.stack()[:6]]
+	else:
+		with open(getLocalFilePath("./logs/{}.txt".format(file)), 'a+') as f:
+			time = datetime.datetime.today().strftime("%d-%B-%Y %H:%M:%S")
+			stack = [s[3] for s in inspect.stack()[:6]]
 
-	# 	usefulStack = []
-	# 	for s in stack:
-	# 		if '<' not in s and s[0].isalpha():
-	# 			usefulStack.append(s)
-	# 		else:
-	# 			break
+			usefulStack = []
+			for s in stack:
+				if '<' not in s and s[0].isalpha():
+					usefulStack.append(s)
+				else:
+					break
 
-	# 	stackString = ("{} -> " * len(usefulStack)).format(*usefulStack[::-1]) # Show the last few methods on the stack to help debug.
-		
-	# 	f.write("{}: {}\n\t\t\t\t\t\t\t\t{}\n".format(time, stackString, msg))
+			stackString = ("{} -> " * len(usefulStack)).format(*usefulStack[::-1]) # Show the last few methods on the stack to help debug.
+			
+			f.write("{}: {}\n\t\t\t\t\t\t\t\t{}\n".format(time, stackString, msg))
 
 def logServer(msg):
 	log(msg, "server")
@@ -112,6 +113,10 @@ def isEmptyOrNull(obj):
 	return obj == None or str(obj).strip() == ''
 
 def cleanUsernameInput(s):
+	# If the username is already all letters, just capitalize the first letter.
+	if s.isalpha():
+		return s[0].capitalize() + s[1:]
+
 	s = s.replace('_', ' ') # Temporarily replace all underscores with regular spaces.
 	s = "".join([c if not c.isspace() else ' ' for c in s.strip()]) # Replace all forms of whitespace with regular spaces.
 	s = "_".join(capitalizeWords(s).split())
@@ -171,8 +176,11 @@ def createCardsDrawnTuple(player, description, cardsDrawn, startingTurn=True):
 
 	return createEmitTuples(constants.SHOW_INFO_MODAL, data, [player])[0]
 
-def createCardOptionsQuestion(self, player, options, question):
-	return createQuestionTuples(question, options, recipients=[player])
+def createGameOverTuple(player, msg):
+	data = {'html': render_template('/modals/info.html', text=msg, header="Game Over!")}
+
+	return createEmitTuples(constants.GAME_OVER, data, [player])[0]
+
 
 # Tuples to show information in players' information modals.
 def createInfoTuple(text, player, header=None, cards=None):
@@ -223,7 +231,7 @@ def createEmporioTuples(alivePlayers, cardsLeft, playerPicking):
 
 	for p in alivePlayers:
 		if p == playerPicking:
-			cardImagesTemplate = Markup(render_template('/modals/card_images.html', cards=cardsLeft, clickable=True))
+			cardImagesTemplate = Markup(render_template('/modals/card_images.html', cards=cardsLeft, clickFunction="pickEmporioCard"))
 			text = "Click on a card to choose it:"
 		else:
 			cardImagesTemplate = Markup(render_template('/modals/card_images.html', cards=cardsLeft))
@@ -234,6 +242,13 @@ def createEmporioTuples(alivePlayers, cardsLeft, playerPicking):
 		emitTuples.extend(createEmitTuples(constants.SHOW_INFO_MODAL, dict(data), recipients=[p]))
 
 	return emitTuples
+
+def createKitCarlsonTuple(player, cardChoices):
+	cardImagesTemplate = Markup(render_template('/modals/card_images.html', cards=cardChoices, clickFunction="pickKitCarlsonCard"))
+	text = "Kit Carlson, click on the card that you don't want to keep:"
+	data = {'html': render_template('/modals/unclosable.html', text=text, header="Drawing Cards", cardsTemplate=cardImagesTemplate, playerIsDead=False)}		
+
+	return createEmitTuples(constants.SHOW_INFO_MODAL, dict(data), recipients=[player])[0]
 
 # Tuple to update a given player's cards-in-hand carousel.
 def createCardCarouselTuple(player, isCurrentPlayer):
@@ -253,6 +268,9 @@ def createPlayerInfoListTuple(playerInfoList, player=None):
 
 def createDiscardClickTuples(player):
 	return [(constants.SLEEP, 0.2, None)] + createEmitTuples(constants.DISCARD_CLICK, dict(), recipients=[player])
+
+def createHealthAnimationTuples(playerUsername, healthChange, players):
+	return [(constants.HEALTH_ANIMATION, {'username': playerUsername, 'healthChange': healthChange}, p) for p in players]
 
 # Returns tuples that are processed by the server and emitted via socket.
 def createEmitTuples(emitString, data, recipients=[]):
@@ -298,6 +316,22 @@ def consolidateTuples(tuples):
 				tuples[i] = newTuple # Set the remaining sleep to 1 second at least.
 		
 		logServer("Consolidated SLEEPS in the tuples: {}".format(tuples))
+
+	# Remove any tuples that come after the game over tuples.
+	temp = list(tuples)
+	tuples = []
+	gameIsOver = False
+	for t in temp:
+		tuples.append(t)
+		
+		if t[0] == constants.UPDATE_ACTION and "won the game" in t[1]['update']:
+			gameIsOver = True
+		else:
+			if gameIsOver:
+				break
+
+	if gameIsOver:
+		tuples = [t for t in tuples if t[0] != constants.SHOW_QUESTION_MODAL]
 
 	logServer("tuples after consolidating: {}".format(tuples))
 	return tuples

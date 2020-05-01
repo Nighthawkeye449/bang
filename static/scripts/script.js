@@ -114,8 +114,8 @@ $(document).ready(function(){
 		/* Socket functions for waiting in the lobby. */
 
 		socket.on('lobby_player_update', function(data) {
-			players = data.usernames;
-			lobby_players_list_string = '';
+			var players = data.usernames;
+			var lobby_players_list_string = '';
 
 			// Update the list of players for people who are already in the lobby.
 			var listTag;
@@ -190,14 +190,41 @@ $(document).ready(function(){
 		});
 
 		socket.on('update_action', function(data) {
+			// Indent updates that are during a turn.
 			var startTag = "<li>";
 			if (!data.update.includes("started their turn")) {
 				startTag = "<li " + "style='margin-left: 25px;'" + ">"
 			}
+			else {
+				if ($("#updateActionList li").length > 0) {
+					startTag = "<br>" + startTag;
+				}
+			}
 
-			$("#updateActionList").prepend(startTag + data.update + "</li>");
+			// Make player usernames red.
+			var redSpan = "<span style='color: red;'>";
 
-			if (/played a(n?) (Bang|Duello|Indians|Gatling)/.test(data.update) == false || (data.update.includes(" avoid"))) {
+			if (!data.update.includes("won the game")) {
+				if (data.update.includes("The dynamite")) {
+					var updateUsername = "";
+					var update = data.update;
+				}
+				else {
+					var spaceIndex = data.update.indexOf(" ");
+					var updateUsername = data.update.substring(0, spaceIndex);
+					var update = data.update.substring(spaceIndex);
+				}
+
+				$("#updateActionList").append(startTag + redSpan + updateUsername + "</span>" + update + "</li>");
+			}
+			else {
+				$("#updateActionList").append(startTag + redSpan + data.update + "</span>" + "</li>");
+			}
+			
+			// Automatically keep the list of updates scrolled to the bottom.
+		    document.getElementById("updateActionList").scrollIntoView(false);
+
+			if ((/played a(n?) (Bang|Duello|Indians|Gatling)/.test(data.update) == false || (data.update.includes(" avoid"))) && !data.update.includes("won the game")) {
 				socket.emit('request_player_list', username);
 			}
 		});
@@ -237,12 +264,40 @@ $(document).ready(function(){
 			setupTooltip();
 		});
 
+		socket.on('health_animation', function(data) {
+			var playerDiv = $('#player_div_' + data.username);
+			var divTop = playerDiv.offset().top;
+			var divPosTop = divTop - $(window).scrollTop();
+			var divLeft = playerDiv.offset().left;
+			var divPosLeft = divLeft - $(window).scrollLeft();
+			
+			$("body").append('<span id="player_damage_span_' + data.username + '" style="font-size: 35px; font-style: italic; color: ' + (data.healthChange < 0 ? "red" : "limegreen") +
+								'; z-index: 200; position: absolute; top: ' + divPosTop.toString() + '; left: ' + (divPosLeft + (playerDiv.width() / 2)).toString() + ' "></span>');
+			var playerDamageSpan = $("#player_damage_span_" + data.username);
+			playerDamageSpan.text((data.healthChange > 0 ? "+" : "") + data.healthChange.toString());
+			playerDamageSpan.animate({
+				top: "0px",
+				opacity: 0.5
+		  }, 5000, function() { playerDamageSpan.remove()});
+		});
+
 		socket.on('discard_click', function(data) {
 			addDiscardClickFunctions();
 		})
 
 		socket.on('game_over', function(data) {
-			$(".outer").html(data.html);
+			if (questionModalIsOpen()) { $(QUESTION_MODAL).dialog( "close" );	}
+			showInfoModal(data.html);
+
+			// Remove the click function for the player's cards if applicable.
+			$(CARDS_IN_HAND_DIV).find("img").each(function() {
+				$(this).attr("onClick", ""); 
+			});
+
+			// Replace the player's username and the question mark with a button for returning to the lobby.
+			$("#usernameSpan").hide();
+			$("#questionmark").hide();
+			$("#return-to-lobby-button").css("display", "block");
 		})
 	}
 });
@@ -300,11 +355,16 @@ function loadPlayPage(data) {
 
 function showInfoModal(html) {
 	// Do nothing if the question modal is already open.
-	if ($(QUESTION_MODAL).is(':visible')) { return; }
+	if (questionModalIsOpen()) { return; }
+
+	// If the incoming info modal is for Kit Carlson, the current info modal needs to be closed if it's open.
+	if (html.includes("Drawing Cards") && html.includes("Kit Carlson")) {
+		closeInfoModal();
+	}
 
 	// If the modals can be combined, just combine them.
 	var eitherModalIsWaiting = waitingModalIsOpen() || html.includes("Waiting");
-	if ($(INFO_MODAL).is(':visible') && !eitherModalIsWaiting && !(html.includes("Emporio"))) {
+	if ($(INFO_MODAL).is(':visible') && !eitherModalIsWaiting && !(html.includes("Emporio</h4>"))) {
 		var newModalElements = $(html);
 		var element = $(INFO_MODAL_TEXT, newModalElements);
 		if (html.includes("<img")) {
@@ -375,6 +435,11 @@ function pickEmporioCard(uid) {
 	socket.emit('emporio_card_picked', username, uid);
 }
 
+function pickKitCarlsonCard(uid) {
+	socket.emit('kit_carlson_card_picked', username, uid);
+	closeInfoModal()
+}
+
 function setupTooltip() {
 	$('a[data-toggle="tooltip"]').tooltip({
 	    animated: 'fade',
@@ -398,12 +463,16 @@ function addDiscardClickFunctions() {
 	});
 }
 
+function questionModalIsOpen() {
+	return $(QUESTION_MODAL).is(':visible');
+}
+
 function waitingModalIsOpen() {
 	return $(INFO_MODAL).html().includes("Waiting");
 }
 
 function emporioModalIsOpen() {
-	return $(INFO_MODAL).html().includes("Emporio") && !($(INFO_MODAL).html().includes("Everyone is done") || $(INFO_MODAL).html().includes("You picked up"));
+	return $(INFO_MODAL).html().includes("Emporio</h4>") && !($(INFO_MODAL).html().includes("Everyone is done") || $(INFO_MODAL).html().includes("You picked up"));
 }
 
 function closeInfoModal() {
@@ -418,39 +487,41 @@ function createCardHand(cardInfo) {
 	var cardsInHandSpanId = "cardsInHandSpan";
 	$(CARDS_IN_HAND_DIV).html("<span id='" + cardsInHandSpanId + "' class='centered centered_text'></span>");
 
-	if (numberOfCards >= minimumCardsForOverlap) {
-		var cardWidth = Math.floor($(CARDS_IN_HAND_DIV).outerWidth() / numberOfCards);
-		var overlapWidth = Math.floor(cardWidth / 5);
-		var cardsWidth = (2 * (cardWidth - overlapWidth)) + ((numberOfCards - 2) * (cardWidth - overlapWidth - overlapWidth));
-	}
-	else {
-		var cardWidth = Math.floor($(CARDS_IN_HAND_DIV).outerWidth() / minimumCardsForOverlap);
-		var overlapWidth = -25;
-		var cardsWidth = (numberOfCards * cardWidth) + ((numberOfCards - 1) * Math.abs(overlapWidth));
-	}
-	
-	var bufferWidth = Math.floor(($(CARDS_IN_HAND_DIV).outerWidth() - cardsWidth) / (numberOfCards >= minimumCardsForOverlap ? 4 : 2));
-	var cardWidthPercent = (cardWidth * 100) / $(CARDS_IN_HAND_DIV).outerWidth();
-	var overlapWidthPercent = (overlapWidth * 100) / $(CARDS_IN_HAND_DIV).outerWidth();
-	var imageLeftXPercent = (bufferWidth * 100) / $(CARDS_IN_HAND_DIV).outerWidth();
-
-	for (var i = 0; i < numberOfCards; i++) {
-		var url = "static/images/cards/actions/" + cardInfo[i].uid.toString() + ".jpg";
-		var zoom_size = numberOfCards >= minimumCardsForOverlap ? (numberOfCards >= minimumCardsForOverlap * 2 ? "2" : "1_5") : "1_2"
-		var img = $('<img class="zoom_hover_' + zoom_size + '">');
-		img.attr('src', url);
-		img.attr('alt', cardInfo[i].name + " " + cardInfo[i].uid.toString())
-		
-		if (cardInfo[i].isCurrentPlayer) {
-			img.attr('onclick', "playCard(" + cardInfo[i].uid.toString() + ")");
+	if (numberOfCards > 0) {
+		if (numberOfCards >= minimumCardsForOverlap) {
+			var cardWidth = Math.floor($(CARDS_IN_HAND_DIV).outerWidth() / numberOfCards);
+			var overlapWidth = Math.floor(cardWidth / 5);
+			var cardsWidth = (2 * (cardWidth - overlapWidth)) + ((numberOfCards - 2) * (cardWidth - overlapWidth - overlapWidth));
 		}
+		else {
+			var cardWidth = Math.floor($(CARDS_IN_HAND_DIV).outerWidth() / minimumCardsForOverlap);
+			var overlapWidth = -25;
+			var cardsWidth = (numberOfCards * cardWidth) + ((numberOfCards - 1) * Math.abs(overlapWidth));
+		}
+		
+		var bufferWidth = Math.floor(($(CARDS_IN_HAND_DIV).outerWidth() - cardsWidth) / (numberOfCards >= minimumCardsForOverlap ? 4 : 2));
+		var cardWidthPercent = (cardWidth * 100) / $(CARDS_IN_HAND_DIV).outerWidth();
+		var overlapWidthPercent = (overlapWidth * 100) / $(CARDS_IN_HAND_DIV).outerWidth();
+		var imageLeftXPercent = (bufferWidth * 100) / $(CARDS_IN_HAND_DIV).outerWidth();
 
-		img.css({"position": "absolute", "max-width": cardWidthPercent.toString() + '%', "z-index": 10+i, "margin-left": imageLeftXPercent + "%"});
+		for (var i = 0; i < numberOfCards; i++) {
+			var url = "static/images/cards/actions/" + cardInfo[i].uid.toString() + ".jpg";
+			var zoom_size = numberOfCards >= minimumCardsForOverlap ? (numberOfCards >= minimumCardsForOverlap * 2 ? "2" : "1_5") : "1_2"
+			var img = $('<img class="zoom_hover_' + zoom_size + '">');
+			img.attr('src', url);
+			img.attr('alt', cardInfo[i].name + " " + cardInfo[i].uid.toString())
+			
+			if (cardInfo[i].isCurrentPlayer) {
+				img.attr('onclick', "playCard(" + cardInfo[i].uid.toString() + ")");
+			}
 
-		img.appendTo(CARDS_IN_HAND_DIV);
-		setImageAfterLoading(img);
+			img.css({"position": "absolute", "max-width": cardWidthPercent.toString() + '%', "z-index": 10+i, "margin-left": imageLeftXPercent + "%"});
 
-		imageLeftXPercent += (cardWidthPercent - overlapWidthPercent);
+			img.appendTo(CARDS_IN_HAND_DIV);
+			setImageAfterLoading(img);
+
+			imageLeftXPercent += (cardWidthPercent - overlapWidthPercent);
+		}
 	}
 
 	var cardText = cardInfo.length > 0 ? "Cards in your hand:" : "You have no cards in your hand."
@@ -473,6 +544,14 @@ function setImageAfterLoading(img){
 	}, 100);
 }
 
+function returnToLobby() {
+	socket.emit("return_to_lobby", username);
+}
+
+function rejoinGame() {
+	socket.emit("rejoin_game", username)
+}
+
 /* Key press functions to enable players to send messages to the server using keyboard strokes. */
 
 $(document).keydown(function (e) {
@@ -491,10 +570,6 @@ $(document).keydown(function (e) {
 
 		    else if (e.which == 83) { // Shift-S, to trigger a special ability when applicable.
 		    	socket.emit('use_special_ability', username);
-		    }
-
-		    else if (e.which == 82) { // Shift-R, to rejoin a game.
-	    		socket.emit('rejoin_game', username);
 		    }
 		}
 	}

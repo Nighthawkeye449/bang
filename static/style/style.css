@@ -160,7 +160,7 @@ select {
   left: 0px;
 }
 
-#leave-lobby-button {
+#leave-lobby-button, #return-to-lobby-button {
   font-family: 'Acme' !important;
   font-size: 25px !important;
   position: absolute;
@@ -172,8 +172,12 @@ select {
   border: 2px solid white;  
 }
 
-#leave-lobby-button:hover {
+#leave-lobby-button:hover, #return-to-lobby-button:hover {
   border: 2px solid red;  
+}
+
+#return-to-lobby-button {
+  display: none;
 }
 
 /* Setup page */

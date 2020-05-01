@@ -13,11 +13,11 @@
                         <span class="centered centered_text play-text-header">Your cards in play:</span>
                     </div>
                     <div id="discardCardDiv" class="row absolute-div centered_text" style="height: 50%; margin-top: 47%;">
-                        <div class="centered_text" style="position: relative; display: inline-block; text-align: center; width: 25%; height: 100%;">
+                        <div class="centered_text" style="position: relative; display: inline-block; text-align: center; width: 25%; height: 100%; z-index: 1">
                             <span class="centered centered_text play-text-header">Your role:</span>
                             <img id="roleImage" src="{{ url_for('static', filename='images/cards/roles/' + player.role|lower + '.jpg') }}" class="centered centered_text centered_image zoom_hover_2_5" style="max-width: 60%; margin-top: auto;">
                         </div>
-                        <div class="centered_text" style="position: relative; display: inline-block; text-align: center; width: 25%; height: 100%;">
+                        <div class="centered_text" style="position: relative; display: inline-block; text-align: center; width: 25%; height: 100%; z-index: 1">
                             <span class="centered centered_text play-text-header">Discard pile:</span>
                             <img id="discardCardImage" src="{{ url_for('static', filename='images/cards/actions/' + (discardUidString if discardUidString|length > 0 else 'flipped_over') + '.jpg') }}" class="centered centered_text centered_image zoom_hover_2_5" style="max-width: 60%; margin-top: auto;">
                         </div>
@@ -40,7 +40,8 @@
             </div>
              <img id="questionmark" src="{{ url_for('static', filename='images/questionmark.png') }}" data-toggle="tooltip" title="Shift-E: End turn<br><br>Shift-C: Cancel ending turn<br><br>Shift-S: Use ability, if ability can be triggered at any time">
             <br>
-            <span id="usernameSpan" {% if player == playerInfoList[0] %} onclick="socket.emit('ending_turn', username);" {% endif %}>{{ player.username }}<span>
+            <span id="usernameSpan" {% if player == playerInfoList[0] %} onclick="socket.emit('ending_turn', username);" {% endif %}>{{ player.username }}</span>
+            <button id="return-to-lobby-button" class="btn btn-danger" type="button" onclick="returnToLobby()">Return To Lobby</button>
         </div>
     </body>
 {% endblock %}

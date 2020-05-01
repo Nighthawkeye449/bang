@@ -50,9 +50,11 @@ def emit(emitString, args=None, recipient=None):
 		socketio.emit(emitString, args, room=recipient.sid)
 		if emitString != UPDATE_PLAYER_LIST:
 			utils.logServer("Emitted socket message '{}' to {} with args {}.".format(emitString, recipient.username, args))
+	
 	elif args != None:
 		socketio.emit(emitString, args)
 		utils.logServer("Emitted socket message '{}' to everybody with args {}.".format(emitString, args))
+	
 	else:
 		socketio.emit(emitString)
 		utils.logServer("Emitted socket message '{}' to everybody.".format(emitString))
@@ -62,14 +64,18 @@ def emitTuples(tuples):
 		if modalEmitString == SLEEP:
 			time.sleep(int(args))
 			utils.logServer("Sleeping for {} seconds while emitting tuples.".format(args))
+		
 		else:
 			emit(modalEmitString, args, recipient)
 
 def getGameForPlayer(username):
-	lobby = USER_LOBBY_DICT[username]
-	game = LOBBY_GAME_DICT[lobby]
+	if username in USER_LOBBY_DICT:
+		lobby = USER_LOBBY_DICT[username]
+
+		if lobby in LOBBY_GAME_DICT:
+			return LOBBY_GAME_DICT[lobby]
 	
-	return game
+	return Gameplay()
 
 # Server setup
 app = Flask(__name__, static_url_path='/static', template_folder='templates')
@@ -234,6 +240,17 @@ def pickEmporioCard(username, uid):
 
 		emitTuples(tuples)
 
+@socketio.on(KIT_CARLSON_CARD_PICKED)
+def pickKitCarlsonCard(username, uid):
+	if validResponseTime(username, EMPORIO_CARD_PICKED):
+		utils.logServer("Received socket message '{}' from {}: {}.".format(EMPORIO_CARD_PICKED, username, uid))
+
+		game = getGameForPlayer(username)
+		with lock:
+			tuples = game.processKitCarlsonCardSelection(username, int(uid))
+
+		emitTuples(tuples)
+
 @socketio.on(ENDING_TURN)
 def endingTurn(username):
 	if validResponseTime(username, ENDING_TURN):
@@ -299,20 +316,35 @@ def playerDisconnect():
 		
 		utils.logServer("Disconnecting {}.".format(username))
 		del CONNECTED_USERS[username]
-	
+
+		# If this is the last player disconnecting from his/her lobby, just delete the lobby entirely.
+		if username in USER_LOBBY_DICT and USER_LOBBY_DICT[username] in LOBBY_GAME_DICT:
+			game = getGameForPlayer(username)
+			if game.started and len([u for u in game.players if u in CONNECTED_USERS]) == 0:
+				lobby = USER_LOBBY_DICT[username]
+				utils.logServer("Last user in lobby {} was disconnected. Removing the game.".format(lobby))
+
+				del LOBBY_GAME_DICT[lobby]
+				
+				for u in game.players:
+					if u in USER_LOBBY_DICT:
+						del USER_LOBBY_DICT[u]
+
 	else:
 		utils.logServer("SID {} didn't match any current users.".format(sid))
 
+@socketio.on(RETURN_TO_LOBBY)
+def returnToPickLobby(username):
+	del USER_LOBBY_DICT[username]
+	emit(RELOAD_LOBBY, {'html': render_template("pick_lobby.html", username=username)}, game.players[username])
+
 @socketio.on(REJOIN_GAME)
 def rejoinGame(username):
-	utils.logServer("Received socket message '{}' from {}.".format(USE_SPECIAL_ABILITY, username))
-	
-	if not utils.isEmptyOrNull(username):
-		game = getGameForPlayer(username)
-		with lock:
-			tuples = game.getPlayerReloadingTuples(username)
+	game = getGameForPlayer(username)
+	with lock:
+		tuples = game.getPlayerReloadingTuples(username)
 
-		emitTuples(tuples)
+	emitTuples(tuples)
 
 #################### App routes ####################
 
@@ -330,7 +362,11 @@ def homePage():
 		if validResult != '':
 			return render_template('home.html', warning_msg=validResult)
 		else:
-			return render_template("pick_lobby.html", username=username)
+			if username in USER_LOBBY_DICT and USER_LOBBY_DICT[username] in LOBBY_GAME_DICT:
+				return render_template("rejoin_game.html", username=username)
+
+			else:
+				return render_template("pick_lobby.html", username=username)
 
 	return render_template('home.html')
 

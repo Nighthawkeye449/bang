@@ -1,0 +1,12 @@
+{% extends "skeleton.html" %}
+{% block content %}
+    <body>
+        <div class="outer">
+            <h1 class="bang-title" style="font-size: 150px;">Bang!</h1>
+            <div class="middle">
+                <br><br><span style="font-size: 30px;">Welcome, {{ username }}!</span><br><br>
+                <button class="btn bang-button" type="button" onclick="rejoinGame()">Rejoin Your Game</button>
+            </div>
+        </div>
+    </body>
+{% endblock %}
