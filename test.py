@@ -69,7 +69,6 @@ def setDefaults(uid=None, numPlayers=7):
     alivePlayers = list(sortedPlayers)[:numPlayers]
 
     game.started = True
-    game.preparedForSetup = True
     game.players = {p.username: p for p in alivePlayers}
     game.playerOrder = list(alivePlayers)
     game.currentTurn = 1

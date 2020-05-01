@@ -18,14 +18,21 @@ var cardsAreBlurred = false;
 var keysPressed = {};
 
 $(document).ready(function(){
-	
-	// Connect to the socket server.
-	username = document.getElementById("username").textContent;
 
+	if (!(navigator.userAgent.search("Chrome") >= 0)) {
+		alert("Using Chrome is strongly encouraged for this game. Other browsers may experience rendering issues.");
+	}
+
+	if (location.protocol !== 'http:') {
+	    location.replace(`http:${location.href.substring(location.protocol.length)}`);
+	}
+
+	username = $("#username").text();
 	window.history.pushState({}, '', '/');
 
+	// Connect to the socket server.
 	if (username.length > 0) {
-		socket = io.connect('http://' + document.domain + ':' + location.port + '/', { forceNew: true });
+		socket = io.connect('http://' + document.domain + ':' + location.port + '/', { forceNew: true, transports: ['websocket'] });
 		socket.emit('connected', username);
 
 		setInterval(function() { socket.emit('keep_alive', username); }, 5000);
@@ -55,9 +62,10 @@ $(document).ready(function(){
 				var option4 = data.option4;
 				var option5 = data.option5;
 				var option6 = data.option6;
+				var option7 = data.option7;
 				var html = data.html;
 				var question = data.question;
-				socket.emit("question_modal_undefined", username, option1, option2, option3, option4, option5, option6, html, question);
+				socket.emit("question_modal_undefined", username, option1, option2, option3, option4, option5, option6, option7, html, question);
 			}
 			else
 			{
@@ -69,23 +77,16 @@ $(document).ready(function(){
 					}
 				}
 
-				// 6 options because the most for any question would be listing 6 other player's usernames.
-				var option1 = data.option1;
-				var option2 = data.option2;
-				var option3 = data.option3;
-				var option4 = data.option4;
-				var option5 = data.option5;
-				var option6 = data.option6;
-
 				var question = data.question;
-
 				var d = {};
-				d[option1] = function() { socket.emit("question_modal_answered", username, question, option1); $( this ).dialog( "close" ); };
-				d[option2] = function() { socket.emit("question_modal_answered", username, question, option2); $( this ).dialog( "close" ); };
-				if (!isNullOrUndefined(option3)) { d[option3] = function() { socket.emit("question_modal_answered", username, question, option3); $( this ).dialog( "close" ); }; }
-				if (!isNullOrUndefined(option4)) { d[option4] = function() { socket.emit("question_modal_answered", username, question, option4); $( this ).dialog( "close" ); }; }
-				if (!isNullOrUndefined(option5)) { d[option5] = function() { socket.emit("question_modal_answered", username, question, option5); $( this ).dialog( "close" ); }; }
-				if (!isNullOrUndefined(option6)) { d[option6] = function() { socket.emit("question_modal_answered", username, question, option6); $( this ).dialog( "close" ); }; }
+
+				d[data.option1] = function() { socket.emit("question_modal_answered", username, question, data.option1); $( this ).dialog( "close" ); };
+				d[data.option2] = function() { socket.emit("question_modal_answered", username, question, data.option2); $( this ).dialog( "close" ); };
+				if (!isNullOrUndefined(data.option3)) { d[data.option3] = function() { socket.emit("question_modal_answered", username, question, data.option3); $( this ).dialog( "close" ); }; }
+				if (!isNullOrUndefined(data.option4)) { d[data.option4] = function() { socket.emit("question_modal_answered", username, question, data.option4); $( this ).dialog( "close" ); }; }
+				if (!isNullOrUndefined(data.option5)) { d[data.option5] = function() { socket.emit("question_modal_answered", username, question, data.option5); $( this ).dialog( "close" ); }; }
+				if (!isNullOrUndefined(data.option6)) { d[data.option6] = function() { socket.emit("question_modal_answered", username, question, data.option6); $( this ).dialog( "close" ); }; }
+				if (!isNullOrUndefined(data.option7)) { d[data.option7] = function() { socket.emit("question_modal_answered", username, question, data.option7); $( this ).dialog( "close" ); }; }
 
 				$(QUESTION_MODAL).css("display", "block");
 				$(QUESTION_MODAL).html(data.html)
@@ -99,6 +100,10 @@ $(document).ready(function(){
 					modal: true,
 					buttons: d
 		    	});
+
+		    	$(".ui-dialog-buttonset button").each(function() {
+					$(this).addClass("bang-button-question");
+				});
 			}
 		});
 
@@ -113,8 +118,15 @@ $(document).ready(function(){
 			lobby_players_list_string = '';
 
 			// Update the list of players for people who are already in the lobby.
+			var listTag;
 			for (var i = 0; i < players.length; i++) {
-				lobby_players_list_string = lobby_players_list_string + '<li>' + players[i].toString() + '</li>';
+				if (i == 0) {
+					listTag = "<li style='color: red;'>"
+				}
+				else {
+					listTag = "<li>"
+				}
+				lobby_players_list_string = lobby_players_list_string + listTag + players[i].toString() + '</li>';
 			}
 			$(LOBBY_USERNAMES).html(lobby_players_list_string);
 
@@ -184,7 +196,10 @@ $(document).ready(function(){
 			}
 
 			$("#updateActionList").prepend(startTag + data.update + "</li>");
-			socket.emit('request_player_list', username);
+
+			if (/played a(n?) (Bang|Duello|Indians|Gatling)/.test(data.update) == false || (data.update.includes(" avoid"))) {
+				socket.emit('request_player_list', username);
+			}
 		});
 
 		socket.on('blur_card_selection', function(data) {
@@ -192,7 +207,7 @@ $(document).ready(function(){
 		});
 
 		socket.on('update_card_hand', function(data) {
-			createHardHand(data.cardInfo);
+			createCardHand(data.cardInfo);
 		});
 
 		socket.on('update_cards_in_play', function(data) {
@@ -211,6 +226,14 @@ $(document).ready(function(){
 		socket.on('update_player_list', function(data) {
 			$(BOTTOM_HALF).html("");
 			$(BOTTOM_HALF).html(data.html);
+			
+			// Shrink any usernames that don't fit above the player's card.
+			$(".player-list-usernames").each(function() {
+			    while ($(this).width() > $(this).parent().width() * 0.8) {
+			        $(this).css('font-size', (parseInt($(this).css('font-size')) - 1) + "px" );
+			    }
+			});
+
 			setupTooltip();
 		});
 
@@ -228,9 +251,7 @@ $(document).ready(function(){
 
 function loadHtml(html) {
 	document.body.innerHTML = "";
-	console.log(html);
 	window.document.write(html);
-	console.log(window.document);
 }
 
 function isNullOrUndefined(obj) {
@@ -246,13 +267,11 @@ function capitalizeWords(s) {
 }
 
 function startButtonClick() {
-	socket.emit('start_button_clicked');
+	socket.emit('start_button_clicked', username);
 }
 
 function leaveLobby() {
-	if (confirm("Are you sure you want to leave the lobby?")) {
-		socket.emit('leave_lobby', username);
-	}
+	socket.emit('leave_lobby', username);
 }
 
 function chooseCharacter(character, isOption1) {
@@ -274,8 +293,9 @@ function chooseCharacter(character, isOption1) {
 
 function loadPlayPage(data) {
 	loadHtml(data.html);
-	createHardHand(data.cardInfo);
+	createCardHand(data.cardInfo);
 	setupTooltip();
+	$("body").css("overflow", "hidden");
 }
 
 function showInfoModal(html) {
@@ -359,7 +379,13 @@ function setupTooltip() {
 	$('a[data-toggle="tooltip"]').tooltip({
 	    animated: 'fade',
 	    placement: 'top',
-	    html: true
+	    html: true,
+	});
+
+	$('img[data-toggle="tooltip"]').tooltip({
+	    animated: 'fade',
+	    placement: 'left',
+	    html: true,
 	});
 }
 
@@ -376,12 +402,16 @@ function waitingModalIsOpen() {
 	return $(INFO_MODAL).html().includes("Waiting");
 }
 
+function emporioModalIsOpen() {
+	return $(INFO_MODAL).html().includes("Emporio") && !($(INFO_MODAL).html().includes("Everyone is done") || $(INFO_MODAL).html().includes("You picked up"));
+}
+
 function closeInfoModal() {
 	$(INFO_MODAL).modal('hide');
 	$(INFO_MODAL).html('');
 }
 
-function createHardHand(cardInfo) {
+function createCardHand(cardInfo) {
 	var minimumCardsForOverlap = 4;
 	var numberOfCards = cardInfo.length;
 
@@ -406,7 +436,8 @@ function createHardHand(cardInfo) {
 
 	for (var i = 0; i < numberOfCards; i++) {
 		var url = "static/images/cards/actions/" + cardInfo[i].uid.toString() + ".jpg";
-		var img = $('<img class="zoom_hover_' + (numberOfCards >= minimumCardsForOverlap ? "1_5" : "1_2") + '">');
+		var zoom_size = numberOfCards >= minimumCardsForOverlap ? (numberOfCards >= minimumCardsForOverlap * 2 ? "2" : "1_5") : "1_2"
+		var img = $('<img class="zoom_hover_' + zoom_size + '">');
 		img.attr('src', url);
 		img.attr('alt', cardInfo[i].name + " " + cardInfo[i].uid.toString())
 		
@@ -446,14 +477,39 @@ function setImageAfterLoading(img){
 
 $(document).keydown(function (e) {
     keysPressed[e.which] = true;
+    var numKeys = Object.keys(keysPressed).length;
 
-    if (16 in keysPressed && 69 in keysPressed && e.which == 69) { // Shift-E, to end the turn.
-    	socket.emit('ending_turn', username);
-    }
+    if (numKeys == 2) {
+	    if (16 in keysPressed) {
+		    if (e.which == 69) { // Shift-E, to end the turn.
+		    	socket.emit('ending_turn', username);
+		    }
 
-    else if (16 in keysPressed && 83 in keysPressed) { // Shift-S, to trigger a special ability when applicable.
-    	socket.emit('use_special_ability', username);
-    }
+		    else if (e.which == 67) { // Shift-C, to cancel ending the turn if no cards have been discarded.
+		    	socket.emit('cancel_ending_turn', username);
+		    }
+
+		    else if (e.which == 83) { // Shift-S, to trigger a special ability when applicable.
+		    	socket.emit('use_special_ability', username);
+		    }
+
+		    else if (e.which == 82) { // Shift-R, to rejoin a game.
+	    		socket.emit('rejoin_game', username);
+		    }
+		}
+	}
+
+	if (numKeys == 1) {
+		if (13 in keysPressed) { // Enter, to close the info modal if it's open.
+			if ($(QUESTION_MODAL).is(':visible')) {
+				e.preventDefault();
+			}
+
+			if (!waitingModalIsOpen() && !emporioModalIsOpen()) {
+				closeInfoModal();
+			}
+		}
+	}
 });
 
 $(document).keyup(function (e) {

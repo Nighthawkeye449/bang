@@ -2,12 +2,9 @@
 {% block content %}
 	<body>
 		<div class="outer">
-			<h1 class="bang-title" style="font-size: 100px; margin-top: 0%; position: relative">Bang!</h1>
+			<h1 class="bang-title" style="font-size: 75px; margin-top: 0%; position: relative">Bang!</h1>
 			<div style="position: relative; display: table; margin: 0 auto">
-				{% if sheriff %}
-					<span id="sheriffUsernameSpan" class="setup-text centered centered_text">{{ sheriff }} gets to be the sheriff.</span>
-					<br>
-				{% endif %}
+				<span id="playerOrderSpan" class="setup-text centered centered_text">The player order will be<br>{{ playerOrderString }}</span><br>
 				<div>
 					<span id="roleSpan" class="setup-text centered centered_text" style="width: 100%;">Your role is:</span><br>
 					<img src="{{ url_for('static', filename='/images/cards/roles/' + role.lower() + '.jpg') }}" alt="{{ role }} Card" class="game_card zoom_hover_2_5 centered">

@@ -1,29 +1,60 @@
 from static.library import constants
 from static.library.card import Card, GunCard
 from static.library.character import Character
+from static.library.gameplay import Gameplay
 from flask import Markup, render_template
 from pathlib import Path
 import datetime
 import inspect
 import json
+import jsonpickle
 import numbers
+import os
 import re
 
+def createSavePath():
+	path = getLocalFilePath(constants.JSON_GAME_PATH)
+
+	if not os.path.exists(path):
+		try:
+			os.makedirs(os.path.dirname(path))
+		except FileExistsError:
+			pass
+
+def saveGame(game):
+	path = getLocalFilePath(constants.JSON_GAME_PATH)
+	
+	with open(path, 'w+') as file:
+		file.write(jsonpickle.encode(game))
+
+def loadGame():
+	try:
+		with open(getLocalFilePath(constants.JSON_GAME_PATH), 'r') as file:
+			loadedGame = jsonpickle.decode(file.read())
+	
+	except FileNotFoundError:
+		utils.logServer("No JSON file found - creating a new one.")
+		loadedGame = createDefaultGame()
+	
+	return loadedGame
+
 def log(msg, file):
-	with open(getLocalFilePath("./logs/{}.txt".format(file)), 'a+') as f:
-		time = datetime.datetime.today().strftime("%d-%B-%Y %H:%M:%S")
-		stack = [s[3] for s in inspect.stack()[:6]]
+	if "html" not in msg:
+		print("{}: {}".format(file.upper(), msg))
+	# with open(getLocalFilePath("./logs/{}.txt".format(file)), 'a+') as f:
+	# 	time = datetime.datetime.today().strftime("%d-%B-%Y %H:%M:%S")
+	# 	stack = [s[3] for s in inspect.stack()[:6]]
 
-		usefulStack = []
-		for s in stack:
-			if '<' not in s and s[0].isalpha():
-				usefulStack.append(s)
-			else:
-				break
+	# 	usefulStack = []
+	# 	for s in stack:
+	# 		if '<' not in s and s[0].isalpha():
+	# 			usefulStack.append(s)
+	# 		else:
+	# 			break
 
-		stackString = ("{} -> " * len(usefulStack)).format(*usefulStack[::-1]) # Show the last few methods on the stack to help debug.
+	# 	stackString = ("{} -> " * len(usefulStack)).format(*usefulStack[::-1]) # Show the last few methods on the stack to help debug.
 		
-		f.write("{}: {}\n\t\t\t\t\t\t\t\t{}\n".format(time, stackString, msg))
+	# 	f.write("{}: {}\n\t\t\t\t\t\t\t\t{}\n".format(time, stackString, msg))
 
 def logServer(msg):
 	log(msg, "server")
@@ -81,10 +112,11 @@ def isEmptyOrNull(obj):
 	return obj == None or str(obj).strip() == ''
 
 def cleanUsernameInput(s):
+	s = s.replace('_', ' ') # Temporarily replace all underscores with regular spaces.
 	s = "".join([c if not c.isspace() else ' ' for c in s.strip()]) # Replace all forms of whitespace with regular spaces.
 	s = "_".join(capitalizeWords(s).split())
 	s = "".join([char for char in s if char.isalpha() or char.isdigit() or char == '_']) # Remove all non-essential characters.
-	return s
+	return s.strip("_")[:40] # Limit usernames to 40 characters.
 
 def getLocalFilePath(path=""):
 	pathToRoot = "\\".join(str(Path(__file__).parent.absolute()).split("\\")[:-2])
@@ -143,22 +175,22 @@ def createCardOptionsQuestion(self, player, options, question):
 	return createQuestionTuples(question, options, recipients=[player])
 
 # Tuples to show information in players' information modals.
-def createInfoTuples(text, header=None, recipients=[], cards=None):
-	logGameplay("Making info tuples for {} with text \"{}\"{}".format([r.username for r in recipients], text, " and cards {}".format([c.name for c in cards]) if cards != None else ""))
+def createInfoTuple(text, player, header=None, cards=None):
+	logGameplay("Making info tuples for {} with text \"{}\"{}".format(player.getLogString(), text, " and cards {}".format([c.name for c in cards]) if cards != None else ""))
 	cardImagesTemplate = None if cards == None else Markup(render_template('/modals/card_images.html', cards=cards))
 	data = {'html': render_template('/modals/info.html', text=text, header=header, cardsTemplate=cardImagesTemplate)}
 
-	return createEmitTuples(constants.SHOW_INFO_MODAL, data, recipients)
+	return createEmitTuples(constants.SHOW_INFO_MODAL, data, recipients=[player])[0]
 
 # Tuple to ask a player a question with the question modal.
-def createQuestionTuple(recipient, question, options, cardsDrawn=None):
-	logGameplay("Making question tuple for {} with question \"{}\" and options {}".format(recipient.username, question, options))
+def createQuestionTuple(player, question, options, cardsDrawn=None):
+	logGameplay("Making question tuple for {} with question \"{}\" and options {}".format(player.username, question, options))
 	cardsDrawnImagesTemplate = None if cardsDrawn == None else Markup(render_template('/modals/card_images.html', cards=cardsDrawn))
 	data = {'html': render_template('/modals/question.html', question=question, cardsDrawnImagesTemplate=cardsDrawnImagesTemplate), 'question': question}
 	for i, option in enumerate(options, start=1):
 		data['option{}'.format(i)] = option
 
-	return createEmitTuples(constants.SHOW_QUESTION_MODAL, data, [recipient])[0]
+	return createEmitTuples(constants.SHOW_QUESTION_MODAL, data, [player])[0]
 
 # Tuple to show an unclosable waiting modal for a player.
 def createWaitingModalTuple(player, text):
@@ -166,8 +198,12 @@ def createWaitingModalTuple(player, text):
 	return createEmitTuples(constants.SHOW_WAITING_MODAL, data, [player])[0]
 
 # Tuples to update players' action screens.
-def createUpdateTuple(updateString):
-	return createEmitTuples(constants.UPDATE_ACTION, {'update': updateString}, list())[0]
+def createUpdateTuples(updateString, gamePlayers):
+	return createEmitTuples(constants.UPDATE_ACTION, {'update': updateString}, [p for p in gamePlayers])
+
+# Tuple to update a single player's screen.
+def createUpdateTupleForPlayer(updateString, player):
+	return createEmitTuples(constants.UPDATE_ACTION, {'update': updateString}, [player])[0]
 
 # Tuples to blur all but certain types of card in a player's hand.
 def createCardBlurTuples(player, cardName, msg=None):
@@ -178,7 +214,7 @@ def createCardBlurTuples(player, cardName, msg=None):
 
 	msg = constants.CLICK_ON_CARD.format(convertRawNameToDisplay(cardName) if len(cardNames) == 1 else "card") if msg == None else msg
 
-	return createInfoTuples(msg, recipients=[player]) + createEmitTuples(constants.BLUR_CARD_SELECTION, {'cardNames': cardNames}, recipients=[player])
+	return [createInfoTuple(msg, player)] + createEmitTuples(constants.BLUR_CARD_SELECTION, {'cardNames': cardNames}, recipients=[player])
 
 # Tuples to show Emporio options and let the next player up pick by clicking on the card.
 def createEmporioTuples(alivePlayers, cardsLeft, playerPicking):
@@ -191,7 +227,7 @@ def createEmporioTuples(alivePlayers, cardsLeft, playerPicking):
 			text = "Click on a card to choose it:"
 		else:
 			cardImagesTemplate = Markup(render_template('/modals/card_images.html', cards=cardsLeft))
-			text = "{} is currently picking a card:".format(playerPicking.username)
+			text = "{} is picking a card:".format(playerPicking.username)
 
 		data = {'html': render_template('/modals/unclosable.html', text=text, header="Emporio", cardsTemplate=cardImagesTemplate, playerIsDead=(not p.isAlive()))}		
 
@@ -208,12 +244,12 @@ def createCardsInPlayTuple(player):
 	return createEmitTuples(constants.UPDATE_CARDS_IN_PLAY, {'html': getCardsInPlayTemplate(player)}, recipients=[player])[0]
 
 # Tuple to update the image of the top discard card for everybody.
-def createDiscardTuple(discardTop):
-	return createEmitTuples(constants.UPDATE_DISCARD_PILE, {'path': constants.CARD_IMAGES_PATH.format(discardTop.uid if discardTop != None else constants.FLIPPED_OVER)}, recipients=[])[0]
+def createDiscardTuples(discardTop, gamePlayers):
+	return createEmitTuples(constants.UPDATE_DISCARD_PILE, {'path': constants.CARD_IMAGES_PATH.format(discardTop.uid if discardTop != None else constants.FLIPPED_OVER)}, recipients=[p for p in gamePlayers])
 
 # Tuple to update the player order/lives/etc. for everybody.
 def createPlayerInfoListTuple(playerInfoList, player=None):
-	return createEmitTuples(constants.UPDATE_PLAYER_LIST, {'html': getPlayerInfoListTemplate(playerInfoList)}, recipients=[] if player == None else [player])[0]
+	return createEmitTuples(constants.UPDATE_PLAYER_LIST, {'html': getPlayerInfoListTemplate(playerInfoList)}, recipients=[p for p in playerInfoList] if player == None else [player])[0]
 
 def createDiscardClickTuples(player):
 	return [(constants.SLEEP, 0.2, None)] + createEmitTuples(constants.DISCARD_CLICK, dict(), recipients=[player])
@@ -222,11 +258,8 @@ def createDiscardClickTuples(player):
 def createEmitTuples(emitString, data, recipients=[]):
 	emitTuples = []
 
-	if recipients == []:
-		emitTuples = [(emitString, data, None)]
-	else:
-		for r in recipients:
-			emitTuples.append( (emitString, data, r) )
+	for r in recipients:
+		emitTuples.append((emitString, data, r))
 
 	logServer("Created {} emit tuples for {}: {}".format(emitString, [p.username for p in recipients], emitTuples))
 

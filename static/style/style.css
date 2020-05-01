@@ -127,6 +127,24 @@ select {
     color: red;
 }
 
+.tooltip .tooltiptext {
+  visibility: hidden;
+  width: 120px;
+  background-color: black;
+  color: #fff;
+  text-align: center;
+  padding: 5px 0;
+  border-radius: 6px;
+  top: -5px;
+  right: 105%;
+  position: absolute;
+  z-index: 1;
+}
+
+.tooltip:hover .tooltiptext {
+  visibility: visible;
+}
+
 /* Lobby page */
 
 .lobby-text {
@@ -238,7 +256,7 @@ select {
 #updateActionDiv {
   width: 30%;
   height: 50%;
-  margin-left: 70%;
+  right: 0%;
   color: black;
   border-left: 3px white solid;
   border-bottom: 3px white solid;
@@ -248,24 +266,52 @@ select {
   font-family: "Acme";
 }
 
+.player-list-usernames {
+  font-size: 5vh;
+}
+
 #updateActionList {
-  font-size: 17px;
   color: white;
+  font-size: 3vh;
 }
 
 .play-text-header {
-  font-size: 20px;
+  font-size: 3vh;
+  z-index: 5;
 }
 
 #usernameSpan {
   font-family: "Acme";
-  font-size: 25px;
+  font-size: 4vh;
   position: absolute;
   bottom: 1%;
   right: 1%;
-  color: red
+  color: red;
 }
 
 #info_modal, #question_modal {
   color: black;
+}
+
+.bang-button-question {
+  font-family: 'Acme' !important;
+  font-size: 20px !important;
+}
+
+.bang-button-question:hover {
+  color: white !important;
+  background: black !important;
+  border-color: white !important;
+}
+
+.modal-title, #infoModalText, #unclosableText {
+  font-family: 'Acme';
+  font-size: 20px;
+}
+
+#questionmark {
+  position: absolute;
+  right: 0.5%;
+  bottom: 7%;
+  width: 1.5%;
 }

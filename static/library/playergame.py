@@ -3,13 +3,13 @@ from static.library.constants import *
 import random
 
 class PlayerGame(dict):
-	def __init__(self, username=None):
+	def __init__(self, username=None, sid=None):
 		self.username = username
-		self.sid = None
+		self.sid = sid
+		self.lives = 0
 		self.role = None
 		self.character = None
 		self.characterOptions = None
-		self.lives = None
 		self.lifeLimit = None
 		self.jailStatus = 0 # 0 = not jailed, 1 = has the card but hasn't drawn for it yet
 		self.cardsInHand = list()

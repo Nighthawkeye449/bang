@@ -11,7 +11,7 @@
         		<span id="lobby-title" class="lobby-text centered_text">In this lobby:</span>
 					<ul id="lobby_usernames" class="lobby-text" style="margin: 0 auto;">
 					{% for name in usernames %}
-						<li>{{ name }}</li> 
+						<li {% if name == usernames[0] %} style="color: red;" {% endif %}>{{ name }}</li> 
 					{% endfor %}
 					</ul>
 			</div>

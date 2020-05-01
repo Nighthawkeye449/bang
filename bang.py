@@ -3,9 +3,9 @@ eventlet.monkey_patch()
 
 from flask import Flask, request, render_template, make_response, redirect, url_for, session, abort, send_from_directory, jsonify
 from flask_socketio import SocketIO, send, emit, join_room, leave_room
+from pathlib import Path
 from signal import signal, SIGINT
 from threading import Lock
-import json
 import os
 import random
 import sys
@@ -28,46 +28,6 @@ def handler(signal_received, frame):
 
 def _default(self, obj):
 	return getattr(obj.__class__, "to_json", _default.default)(obj)
-
-_default.default = json.JSONEncoder().default
-json.JSONEncoder.default = _default
-
-def saveGame(game):
-	with open(JSON_GAME_PATH, 'w') as file:
-		json.dump(game, file, indent=4, sort_keys=True)
-	with open(JSON_GAME_PATH.replace(".json", "_backup.json"), 'w') as file:
-		json.dump(game, file, indent=4, sort_keys=True)
-
-def createDefaultGame():
-	game = {
-			"site_variables" : {
-				"ip" : "127.0.0.1",
-				"port" : 9999
-			},
-			"debug": {
-				"logging" : True,
-				"cookie_expiration_days" : 7
-			},
-			"gp": Gameplay(),
-		}
-	
-	saveGame(game)
-	return game
-
-def resetGame():
-	if os.path.exists(JSON_GAME_PATH):
-		os.remove(JSON_GAME_PATH)
-	return createDefaultGame()
-
-def loadGame():
-	try:
-		with open(JSON_GAME_PATH, 'r') as game_file:
-			game = json.load(game_file)
-			game['gp'] = Gameplay(**game['gp'])
-	except FileNotFoundError:
-		utils.logServer("No JSON file found - creating a new one.")
-		game = createDefaultGame()
-	return game
 
 # Validate whether enough time has passed since the previous socket message from a given user to consider a new one valid.
 # This is useful for avoiding things like accidental double-clicks.
@@ -105,20 +65,25 @@ def emitTuples(tuples):
 		else:
 			emit(modalEmitString, args, recipient)
 
-
-JSON_GAME_PATH = utils.getLocalFilePath("game.json")
+def getGameForPlayer(username):
+	lobby = USER_LOBBY_DICT[username]
+	game = LOBBY_GAME_DICT[lobby]
+	
+	return game
 
 # Server setup
 app = Flask(__name__, static_url_path='/static', template_folder='templates')
 app.secret_key = 'secretkey1568486123168'
-socketio = SocketIO(app)
+socketio = SocketIO(app, always_connect=True)
 
 lock = Lock()
 
-userLobbyDic = {}
-lobbyGameDic = {}
+USER_LOBBY_DICT = {}
+LOBBY_GAME_DICT = {}
 
 SOCKET_MESSAGE_TIMESTAMPS = dict()
+
+CONNECTED_USERS = dict()
 
 #################### Socket IO functions ####################
 
@@ -127,50 +92,67 @@ def keepAlive(username):
 	socketio.emit(KEEP_ALIVE, dict(), room=request.sid)
 
 @socketio.on(CONNECTED)
-def connectUsernameToSid(username):
+def userConnected(username):
 	utils.logServer("Received socket message '{}' from {}.".format(CONNECTED, username))
-	with lock:
-		game['gp'].players[username] = PlayerGame(username)
-		game['gp'].players[username].sid = request.sid
+	
+	CONNECTED_USERS[username] = request.sid
+
+	if username in USER_LOBBY_DICT:
+		game = getGameForPlayer(username)
+		game.players[username].sid = request.sid
 
 @socketio.on(LEAVE_LOBBY)
 def leaveLobby(username):
-	sid = game['gp'].players[username].sid
+	game = getGameForPlayer(username)
+	sid = game.players[username].sid
+	lobby = USER_LOBBY_DICT[username]
 	
-	del game['gp'].players[username]
-	sorted_usernames = sorted(game['gp'].players.keys())
+	game.removePlayer(username)
+	del USER_LOBBY_DICT[username]
+
+	# Delete this lobby entirely if all the players have left.
+	if len([u for u in USER_LOBBY_DICT if USER_LOBBY_DICT[u] == lobby]) == 0:
+		del LOBBY_GAME_DICT[lobby]
+
+	sorted_usernames = sorted(game.players.keys())
 
 	# Broadcast the updated list of players to everybody else in this lobby.
-	emit(LOBBY_PLAYER_UPDATE, {'usernames': sorted_usernames}, None)
+	tuples = [(LOBBY_PLAYER_UPDATE, {'usernames': sorted_usernames}, p) for p in game.players.values()]
+	emitTuples(tuples)
 
 	# Reload the pick lobby page for the player who left.
 	socketio.emit(RELOAD_LOBBY, {'html': render_template("pick_lobby.html", username=username)}, room=sid)
 
 
 @socketio.on(START_BUTTON_CLICKED)
-def startGame():
-	utils.logServer("Received socket message '{}'. Preparing game for setup.".format(START_BUTTON_CLICKED))
-	with lock:
-		if not game['gp'].preparedForSetup:
-			game['gp'].prepareForSetup()
+def startGame(username):
+	lobby = USER_LOBBY_DICT[username]
+	tuples = []
+	utils.logServer("Received socket message '{}' from {}. Preparing game for setup in lobby {}.".format(START_BUTTON_CLICKED, username, lobby))
 
-	emit(START_GAME)
+	game = LOBBY_GAME_DICT[lobby]
+	if not game.started:
+		tuples = game.prepareForSetup()
+
+	if tuples:
+		emitTuples(tuples)
 
 @socketio.on(SET_CHARACTER)
 def setCharacter(username, character):
 	utils.logServer("Received socket message '{}' from {}: {}.".format(SET_CHARACTER, username, character))
 	tuples = []
+	game = getGameForPlayer(username)
 
 	with lock:
-		game['gp'].assignCharacter(username, character)
-		unassigned_players_remaining = [u for u in game['gp'].players if game['gp'].players[u].character == None]
+		game.assignCharacter(username, character)
+		unassigned_players_remaining = [u for u in game.players if game.players[u].character == None]
 
 		if len(unassigned_players_remaining) > 0:
 			emit('character_was_set', {'players_remaining': unassigned_players_remaining})
 
 		else:
 			# Start the game for the players by loading their main play screens and info modals.
-			tuples = game['gp'].finalizeSetup()
+			tuples = game.getStartGameTuples()
 
 	if tuples:
 		emitTuples(tuples)
@@ -179,100 +161,177 @@ def setCharacter(username, character):
 def cardWasDiscarded(username, uid):
 	if validResponseTime(username):
 		utils.logServer("Received socket message '{}' from {}: {}.".format(CARD_WAS_DISCARDED, username, uid))
-		with lock:
-			card = game['gp'].getCardByUid(uid)
 
-			utils.logServer("Discarding {} ({}) by {}.".format(card.name, uid, username))
-			player = game['gp'].players[username]
-			game['gp'].discardCard(player, card)
+		game = getGameForPlayer(username)
+		card = game.getCardByUid(uid)
+
+		utils.logServer("Discarding {} ({}) by {}.".format(card.name, uid, username))
+		player = game.players[username]
+		with lock:
+			game.discardCard(player, card)
 
 @socketio.on(VALIDATE_CARD_CHOICE)
 def cardWasPlayed(username, uid):
 	if validResponseTime(username):
 		utils.logServer("Received socket message '{}' from {}: {}.".format(VALIDATE_CARD_CHOICE, username, uid))
+		
+		game = getGameForPlayer(username)
 		with lock:
-			card = game['gp'].getCardByUid(int(uid))
+			tuples = game.validateCardChoice(username, uid)
 
-			if card == None:
-				utils.logError("Received request to play card with UID {}. UID not recognized.".format(uid))
-			elif username != game['gp'].getCurrentPlayerName():
-				utils.logError("Received request to play a card from {}, but it's currently {}'s turn.".format(username, game['gp'].getCurrentPlayerName()))
-			else:
-				utils.logServer("Received socket message from {} to play {} (UID: {}).".format(username, card.name, uid))
-				emitTuples(game['gp'].validateCardChoice(username, uid))
+		emitTuples(tuples)
 
 @socketio.on(INFO_MODAL_UNDEFINED)
 def waitForInfoModal(username, html):
 	utils.logServer("Info modal load failed for {}. Waiting 1/100 of a second and trying again.".format(username))
 	time.sleep(0.01)
-	emit(SHOW_INFO_MODAL, {'html': html}, recipient=game['gp'].players[username])
+	
+	game = getGameForPlayer(username)
+	tup = (SHOW_INFO_MODAL, {'html': html}, game.players[username])
+
+	emit(*tup)
 
 @socketio.on(QUESTION_MODAL_UNDEFINED)
-def waitForQuestionModal(username, option1, option2, option3, option4, option5, option6, html, question):
+# 7 options because the most for any question would be listing 6 other player's usernames + "Never mind".
+def waitForQuestionModal(username, option1, option2, option3, option4, option5, option6, option7, html, question):
 	utils.logServer("Question modal load failed for {}. Waiting 1/100 of a second and trying again.".format(username))
 	time.sleep(0.01)
-	emit(SHOW_QUESTION_MODAL, {'option1': option1, 'option2': option2, 'option3': option3, 'option4': option4, 'option5': option5, 'option6': option6, 'html': html, 'question': question}, recipient=game['gp'].players[username])
+
+	game = getGameForPlayer(username)
+	tup = (SHOW_QUESTION_MODAL, {'option1': option1, 'option2': option2, 'option3': option3, 'option4': option4, 'option5': option5, 'option6': option6, 'option7': option7, 'html': html, 'question': question}, game.players[username])
+
+	emit(*tup)
 
 @socketio.on(QUESTION_MODAL_ANSWERED)
 def questionModalAnswered(username, question, answer):
 	if validResponseTime(username):
 		utils.logServer("Received socket message '{}' from {}: {} -> {}.".format(QUESTION_MODAL_ANSWERED, username, question, answer))
-		emitTuples(game['gp'].processQuestionResponse(username, question, answer))
+
+		game = getGameForPlayer(username)
+		with lock:
+			tuples = game.processQuestionResponse(username, question, answer)
+
+		emitTuples(tuples)
 
 @socketio.on(BLUR_CARD_PLAYED)
 def playBlurCard(username, uid):
 	if validResponseTime(username):
 		utils.logServer("Received socket message '{}' from {}: {}.".format(BLUR_CARD_PLAYED, username, uid))
-		emitTuples(game['gp'].processBlurCardSelection(username, int(uid)))
+
+		game = getGameForPlayer(username)
+		with lock:
+			tuples = game.processBlurCardSelection(username, int(uid))
+		
+		emitTuples(tuples)
 
 @socketio.on(EMPORIO_CARD_PICKED)
 def pickEmporioCard(username, uid):
 	if validResponseTime(username):
 		utils.logServer("Received socket message '{}' from {}: {}.".format(EMPORIO_CARD_PICKED, username, uid))
-		emitTuples(game['gp'].processEmporioCardSelection(username, int(uid)))
+
+		game = getGameForPlayer(username)
+		with lock:
+			tuples = game.processEmporioCardSelection(username, int(uid))
+
+		emitTuples(tuples)
 
 @socketio.on(ENDING_TURN)
 def endingTurn(username):
 	if validResponseTime(username):
 		utils.logServer("Received socket message '{}' from {}.".format(ENDING_TURN, username))
-		emitTuples(game['gp'].startNextTurn(username))
+
+		game = getGameForPlayer(username)
+		with lock:
+			tuples = game.startNextTurn(username)
+		
+		emitTuples(tuples)
+
+@socketio.on(CANCEL_ENDING_TURN)
+def cancelEndingTurn(username):
+	if validResponseTime(username):
+		utils.logServer("Received socket message '{}' from {}.".format(CANCEL_ENDING_TURN, username))
+
+		game = getGameForPlayer(username)
+		with lock:
+			tuples = game.cancelEndingTurn(username)
+
+		emitTuples(tuples)
 
 @socketio.on(DISCARDING_CARD)
 def discardingCard(username, uid):
 	if validResponseTime(username):
 		utils.logServer("Received socket message '{}' from {}.".format(DISCARDING_CARD, username))
-		emitTuples(game['gp'].playerDiscardingCard(username, int(uid)))
+
+		game = getGameForPlayer(username)
+		with lock:
+			tuples = game.playerDiscardingCard(username, int(uid))
+		
+		emitTuples(tuples)
 
 @socketio.on(USE_SPECIAL_ABILITY)
 def specialAbility(username):
 	if validResponseTime(username):
 		utils.logServer("Received socket message '{}' from {}.".format(USE_SPECIAL_ABILITY, username))
-		emitTuples(game['gp'].useSpecialAbility(username))
+		game = getGameForPlayer(username)
+
+		with lock:
+			tuples = game.useSpecialAbility(username)
+		
+		emitTuples(tuples)
 
 @socketio.on(REQUEST_PLAYER_LIST)
 def requestPlayerList(username):
+	game = getGameForPlayer(username)
+	
 	with lock:
-		tuples = game['gp'].getPlayerList(username)
+		tuples = game.getPlayerList(username)
+	
 	emitTuples(tuples)
+
+@socketio.on(DISCONNECT)
+def playerDisconnect():
+	sid = request.sid
+
+	userSidList = [u for u in CONNECTED_USERS if CONNECTED_USERS[u] == sid]
+
+	if userSidList:
+		username = userSidList[0]
+		utils.logServer("Received socket message '{}' from SID {} ({}).".format(DISCONNECT, sid, username))
+		
+		utils.logServer("Disconnecting {}.".format(username))
+		del CONNECTED_USERS[username]
+	
+	else:
+		utils.logServer("SID {} didn't match any current users.".format(sid))
+
+@socketio.on(REJOIN_GAME)
+def rejoinGame(username):
+	utils.logServer("Received socket message '{}' from {}.".format(USE_SPECIAL_ABILITY, username))
+	
+	if not utils.isEmptyOrNull(username):
+		game = getGameForPlayer(username)
+		with lock:
+			tuples = game.getPlayerReloadingTuples(username)
+
+		emitTuples(tuples)
 
 #################### App routes ####################
 
 @app.route("/", methods = ['POST', 'GET'])
 def homePage():
-	with lock:
-		# The method will be POST if the text box for username has been submitted.
-		if request.method == 'POST':
-			if 'name' not in request.form or utils.isEmptyOrNull(request.form['name']):
-				utils.logServer("A player attempted to join with an invalid username. Reloading home page.")
-				return render_template('home.html')
-			
-			# Add this new player if the username is valid.
-			username = utils.cleanUsernameInput(request.form['name'])
-			if not checkUsernameValidity(username):
-				return render_template('home.html', warning_msg="Sorry, that username is invalid! Try something else.")
-			else:
-				utils.logServer("Adding new username {}.".format(username))
-				return render_template("pick_lobby.html", username=username)
+	# The method will be POST if the text box for username has been submitted.
+	if request.method == 'POST':
+		if 'name' not in request.form or utils.isEmptyOrNull(request.form['name']):
+			utils.logServer("A player attempted to join with an invalid username. Reloading home page.")
+			return render_template('home.html')
+		
+		# Add this new player if the username is valid.
+		username = utils.cleanUsernameInput(request.form['name'])
+		validResult = checkUsernameValidity(username)
+		if validResult != '':
+			return render_template('home.html', warning_msg=validResult)
+		else:
+			return render_template("pick_lobby.html", username=username)
 
 	return render_template('home.html')
 
@@ -281,78 +340,85 @@ def lobby():
 
 	username = request.form['username']
 
+	# Player is joining an existing lobby.
 	if not utils.isEmptyOrNull(request.form['lobby_number']):
-		if not request.form['lobby_number'] in lobbyGameDic:
-			return render_template('pick_lobby.html', warning_msg="Sorry, that lobby couldn't be found.")
+		lobbyNumber = request.form['lobby_number']
+		
+		if request.form['lobby_number'] not in LOBBY_GAME_DICT:
+			return render_template('pick_lobby.html', username=username, warning_msg="Sorry, that lobby couldn't be found.")
 
-		if request.form['lobby_number'] in lobbyGameDic:
-			return render_template('lobby.html', usernames=sorted_usernames, username=username, lobbyNumber=request.form['lobby_number'])
+		# Don't allow players to join a lobby for a game that's already started.
+		elif LOBBY_GAME_DICT[lobbyNumber].started:
+			return render_template('pick_lobby.html', username=username, warning_msg="Sorry, that game has already started.")
 
-	# is this the right way to request from the button?
-	if request.form['submit-button']:
-		lobbyNumber = random.randint(1111,9999)
-		while lobbyNumber in lobbyGameDic:
-			lobbyNumber = random.randint(1111,9999)
-		lobbyGameDic[lobbyNumber] = resetGame()
-		userLobbyDic[username] = lobbyNumber #link the username to the lobby number
+		# Don't allow players to join a lobby if it's already full.
+		elif len(LOBBY_GAME_DICT[lobbyNumber].players) == 7:
+			return render_template('pick_lobby.html', username=username, warning_msg="Sorry, that lobby is already full.")
 
-	sorted_usernames = sorted(game['gp'].players.keys())
+	# Player is joining a new lobby.
+	else:
+		lobbyNumber = str(random.randint(1111, 9999))
+		
+		# Generate new lobby numbers until an unused one is made.
+		while lobbyNumber in LOBBY_GAME_DICT:
+			lobbyNumber = str(random.randint(1111, 9999))
+		
+		# Create a new game for this lobby.
+		LOBBY_GAME_DICT[lobbyNumber] = Gameplay()
+	
+	game = LOBBY_GAME_DICT[lobbyNumber]
+	USER_LOBBY_DICT[username] = lobbyNumber
+
+	game.addPlayer(username, CONNECTED_USERS[username] if username in CONNECTED_USERS else 0)
+	username_order = [p.username for p in game.playerOrder]
 	
 	# Broadcast the updated list of players to everybody in this lobby.
-	emit(LOBBY_PLAYER_UPDATE, {'usernames': sorted_usernames}, None)
+	tuples = [(LOBBY_PLAYER_UPDATE, {'usernames': username_order}, p) for p in game.players.values()]
+	emitTuples(tuples)
 
+	# Render the lobby page with all usernames for the new player.
 	utils.logServer("Rendering lobby for {}".format(username))
-	return render_template('lobby.html', usernames=sorted_usernames, username=username, lobbyNumber=userLobbyDic[username])
+	return render_template('lobby.html', usernames=username_order, username=username, lobbyNumber=USER_LOBBY_DICT[username])
 
 @app.route("/setup", methods = ['POST', 'GET'])
 def setup():
 	username = request.json['username']
 	utils.logServer("Received request for '/setup' from {}".format(username))
 
-	with lock:
-		game['gp'].assignNewPlayer(username)
-
-	# Wait until the Sheriff has been assigned so that his/her name can be rendered too.
-	while True:
-		time.sleep(0.2) # Check every 200 milliseconds.
-		with lock:
-			if game['gp'].sheriffUsername:
-				utils.logServer("Sheriff has been assigned. Rendering setup page for {}.".format(username))
-				return render_template('setup.html',
-					role=game['gp'].players[username].role,
-					option1=game['gp'].players[username].characterOptions[0],
-					option2=game['gp'].players[username].characterOptions[1],
-					sheriff=game['gp'].sheriffUsername if game['gp'].sheriffUsername != username else None,
-					numOtherPlayers=len(game['gp'].players) - 1)
-
-#################### App route for POST calls that query information instead of rendering full pages ####################
-
-@app.route("/synchronousPost", methods = ['POST'])
-def synchronousPost():
-	username = request.json['username']
-	uid = int(request.json['uid'])
-	path = request.json['path']
+	game = getGameForPlayer(username)
+	
+	utils.logServer("Rendering setup page for {}.".format(username))
+	return render_template('setup.html',
+		playerOrderString=" -> ".join(["{}{}".format(p.username, "" if p != game.playerOrder[0] else " (Sheriff) ") for p in game.playerOrder]),
+		role=game.players[username].role,
+		option1=game.players[username].characterOptions[0],
+		option2=game.players[username].characterOptions[1],
+		numOtherPlayers=len(game.players) - 1)
 
 def checkUsernameValidity(username):
+	invalidMsg = "Sorry, that username is invalid! Try something else."
+	usernameTakenMsg = "Sorry, that username is taken! Try something else."
 	if len(username) == 0:
 		utils.logServer("A player's username was empty after filtering out characters. Rendering home page with warning message.")
-		return False
-	elif username in game['gp'].players: # If the username is taken, just display an error message and let the user try again.
-		utils.logServer("A player attempted to join with username {}, which is already taken. Rendering home page with warning message.".format(username))
-		return False
+		return invalidMsg
 	elif username.upper() in utils.getListOfConstants():
 		utils.logServer("A player attempted to join with username {}, which matches a constant. Rendering home page with warning message.".format(username))
-		return False
+		return invalidMsg
 	elif all([c.isdigit() for c in username]):
 		utils.logServer("A player attempted to join with a digit-only username. Rendering home page with warning message.")
-		return False
+		return invalidMsg
+	elif username in CONNECTED_USERS: # If the username is taken, just display an error message and let the user try again.
+		utils.logServer("A player attempted to join with username {}, which is already taken. Rendering home page with warning message.".format(username))
+		return usernameTakenMsg
 
-	return True
+	return ''
 
 # Start Server
 if __name__ == '__main__':
 
 	utils.resetLogs()
+
+	utils.createSavePath()
 
 	signal(SIGINT, handler)
 
