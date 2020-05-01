@@ -365,7 +365,8 @@ function showInfoModal(html) {
 
 	// If the modals can be combined, just combine them.
 	var eitherModalIsWaiting = waitingModalIsOpen() || html.includes("Waiting");
-	if ($(INFO_MODAL).is(':visible') && !eitherModalIsWaiting && !(html.includes("Emporio</h4>"))) {
+	var eitherModalIsEmporio = emporioModalIsOpen() || (html.includes("Emporio</h"));
+	if ($(INFO_MODAL).is(':visible') && !eitherModalIsWaiting && !eitherModalIsEmporio) {
 		var newModalElements = $(html);
 		var element = $(INFO_MODAL_TEXT, newModalElements);
 		if (html.includes("<img")) {
