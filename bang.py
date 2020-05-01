@@ -22,8 +22,7 @@ from static.library.playergame import PlayerGame
 def handler(signal_received, frame):
     # Catch CTRL-C in order to separate sessions in the log.
     for func in [utils.logServer, utils.logPlayer, utils.logGameplay]:
-	    func("Exiting game with CTRL-C.")
-	    func("\n\n\n")
+	    func("Exiting game with CTRL-C.\n\n\n")
     sys.exit(0)
 
 def _default(self, obj):
@@ -31,18 +30,19 @@ def _default(self, obj):
 
 # Validate whether enough time has passed since the previous socket message from a given user to consider a new one valid.
 # This is useful for avoiding things like accidental double-clicks.
-def validResponseTime(username):
+def validResponseTime(username, messageType):
 	global SOCKET_MESSAGE_TIMESTAMPS
 
 	if username not in SOCKET_MESSAGE_TIMESTAMPS:
-		SOCKET_MESSAGE_TIMESTAMPS[username] = time.time()
+		SOCKET_MESSAGE_TIMESTAMPS[username] = (messageType, time.time())
 		return True
 	else:
-		if time.time() - SOCKET_MESSAGE_TIMESTAMPS[username] >= 1:
-			SOCKET_MESSAGE_TIMESTAMPS[username] = time.time()
+		previousType, previousTime = SOCKET_MESSAGE_TIMESTAMPS[username]
+		if messageType != previousType or time.time() - previousTime >= 0.25:
+			SOCKET_MESSAGE_TIMESTAMPS[username] = (messageType, time.time())
 			return True
 		else:
-			utils.logServer("Not enough time has passed since {}'s last socket message ({}). Ignoring this one.".format(username, time.time() - SOCKET_MESSAGE_TIMESTAMPS[username]))
+			utils.logServer("Not enough time has passed since {}'s last socket message ({}) for {}. Ignoring this one.".format(username, time.time() - previousTime, messageType))
 			return False
 
 def emit(emitString, args=None, recipient=None):
@@ -80,7 +80,6 @@ lock = Lock()
 
 USER_LOBBY_DICT = {}
 LOBBY_GAME_DICT = {}
-
 SOCKET_MESSAGE_TIMESTAMPS = dict()
 
 CONNECTED_USERS = dict()
@@ -159,7 +158,7 @@ def setCharacter(username, character):
 
 @socketio.on(CARD_WAS_DISCARDED)
 def cardWasDiscarded(username, uid):
-	if validResponseTime(username):
+	if validResponseTime(username, CARD_WAS_DISCARDED):
 		utils.logServer("Received socket message '{}' from {}: {}.".format(CARD_WAS_DISCARDED, username, uid))
 
 		game = getGameForPlayer(username)
@@ -172,7 +171,7 @@ def cardWasDiscarded(username, uid):
 
 @socketio.on(VALIDATE_CARD_CHOICE)
 def cardWasPlayed(username, uid):
-	if validResponseTime(username):
+	if validResponseTime(username, VALIDATE_CARD_CHOICE):
 		utils.logServer("Received socket message '{}' from {}: {}.".format(VALIDATE_CARD_CHOICE, username, uid))
 		
 		game = getGameForPlayer(username)
@@ -204,7 +203,7 @@ def waitForQuestionModal(username, option1, option2, option3, option4, option5, 
 
 @socketio.on(QUESTION_MODAL_ANSWERED)
 def questionModalAnswered(username, question, answer):
-	if validResponseTime(username):
+	if validResponseTime(username, QUESTION_MODAL_ANSWERED):
 		utils.logServer("Received socket message '{}' from {}: {} -> {}.".format(QUESTION_MODAL_ANSWERED, username, question, answer))
 
 		game = getGameForPlayer(username)
@@ -215,7 +214,7 @@ def questionModalAnswered(username, question, answer):
 
 @socketio.on(BLUR_CARD_PLAYED)
 def playBlurCard(username, uid):
-	if validResponseTime(username):
+	if validResponseTime(username, BLUR_CARD_PLAYED):
 		utils.logServer("Received socket message '{}' from {}: {}.".format(BLUR_CARD_PLAYED, username, uid))
 
 		game = getGameForPlayer(username)
@@ -226,7 +225,7 @@ def playBlurCard(username, uid):
 
 @socketio.on(EMPORIO_CARD_PICKED)
 def pickEmporioCard(username, uid):
-	if validResponseTime(username):
+	if validResponseTime(username, EMPORIO_CARD_PICKED):
 		utils.logServer("Received socket message '{}' from {}: {}.".format(EMPORIO_CARD_PICKED, username, uid))
 
 		game = getGameForPlayer(username)
@@ -237,7 +236,7 @@ def pickEmporioCard(username, uid):
 
 @socketio.on(ENDING_TURN)
 def endingTurn(username):
-	if validResponseTime(username):
+	if validResponseTime(username, ENDING_TURN):
 		utils.logServer("Received socket message '{}' from {}.".format(ENDING_TURN, username))
 
 		game = getGameForPlayer(username)
@@ -248,7 +247,7 @@ def endingTurn(username):
 
 @socketio.on(CANCEL_ENDING_TURN)
 def cancelEndingTurn(username):
-	if validResponseTime(username):
+	if validResponseTime(username, CANCEL_ENDING_TURN):
 		utils.logServer("Received socket message '{}' from {}.".format(CANCEL_ENDING_TURN, username))
 
 		game = getGameForPlayer(username)
@@ -259,7 +258,7 @@ def cancelEndingTurn(username):
 
 @socketio.on(DISCARDING_CARD)
 def discardingCard(username, uid):
-	if validResponseTime(username):
+	if validResponseTime(username, DISCARDING_CARD):
 		utils.logServer("Received socket message '{}' from {}.".format(DISCARDING_CARD, username))
 
 		game = getGameForPlayer(username)
@@ -270,7 +269,7 @@ def discardingCard(username, uid):
 
 @socketio.on(USE_SPECIAL_ABILITY)
 def specialAbility(username):
-	if validResponseTime(username):
+	if validResponseTime(username, USE_SPECIAL_ABILITY):
 		utils.logServer("Received socket message '{}' from {}.".format(USE_SPECIAL_ABILITY, username))
 		game = getGameForPlayer(username)
 
