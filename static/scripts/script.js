@@ -222,7 +222,8 @@ $(document).ready(function(){
 			}
 			
 			// Automatically keep the list of updates scrolled to the bottom.
-		    document.getElementById("updateActionList").scrollIntoView(false);
+			var updateList = document.getElementById("updateActionList");
+		    if (!isNullOrUndefined(updateList)) { updateList.scrollIntoView(false); }
 
 			if ((/played a(n?) (Bang|Duello|Indians|Gatling)/.test(data.update) == false || (data.update.includes(" avoid"))) && !data.update.includes("won the game")) {
 				socket.emit('request_player_list', username);
