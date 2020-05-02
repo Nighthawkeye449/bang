@@ -56,7 +56,7 @@ CLUB = "club"
 # Constants for questions asked in the question modal.
 QUESTION_JESSE_JONES = "For your first card, do you want to draw randomly from the hand of another player or from the deck?"
 QUESTION_KIT_CARLSON = "Which of these 3 cards do you want to put back onto the top of the deck?"
-QUESTION_PEDRO_RAMIREZ = "For your first card, do you want to draw from the top of the discard pile or from the deck?"
+QUESTION_PEDRO_RAMIREZ = "For your first card, do you want to draw from the top of the discard pile or the deck?"
 QUESTION_LUCKY_DUKE = "You need to \"draw!\" for {}. Which of these 2 cards do you want to use? Both will be discarded, but your choice will end on top."
 QUESTION_WHOSE_HAND = "Whose hand do you want to draw from?"
 QUESTION_WHOSE_CARDS = "Whose cards do you want to target?"

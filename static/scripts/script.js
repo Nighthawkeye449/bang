@@ -35,7 +35,7 @@ $(document).ready(function(){
 		socket = io.connect('http://' + document.domain + ':' + location.port + '/', { forceNew: true, transports: ['websocket'] });
 		socket.emit('connected', username);
 
-		setInterval(function() { socket.emit('keep_alive', username); }, 5000);
+		// setInterval(function() { socket.emit('keep_alive', username); }, 5000);
 
 		/* Socket functions for showing the modals. */
 
@@ -98,7 +98,10 @@ $(document).ready(function(){
 					width: "auto",
 					minHeight: 0,
 					modal: true,
-					buttons: d
+					buttons: d,
+					open: function(event, ui) {
+						$(this).dialog('widget').position({ my: "center", at: "center", of: window });
+					}
 		    	});
 
 		    	$(".ui-dialog-buttonset button").each(function() {
@@ -108,12 +111,14 @@ $(document).ready(function(){
 		});
 
 		socket.on('show_waiting_modal', function(data) {
+			console.log("Received socket message: ", 'show_waiting_modal');
 			showInfoModal(data.html);
 		});
 
 		/* Socket functions for waiting in the lobby. */
 
 		socket.on('lobby_player_update', function(data) {
+			console.log("Received socket message: ", 'lobby_player_update');
 			var players = data.usernames;
 			var lobby_players_list_string = '';
 
@@ -140,10 +145,12 @@ $(document).ready(function(){
 		});
 
 		socket.on('reload_lobby', function(data) {
+			console.log("Received socket message: ", 'reload_lobby');
 			loadHtml(data.html);
 		});
 
 		socket.on('start_game', function(data) {
+			console.log("Received socket message: ", 'start_game');
 			var xhr = new XMLHttpRequest();
 
 			xhr.onreadystatechange = function() {
@@ -162,6 +169,7 @@ $(document).ready(function(){
 		/* Socket functions for setup. */
 
 		socket.on('character_was_set', function(data) {
+			console.log("Received socket message: ", 'character_was_set');
 			if (data.players_remaining.includes(username)) {
 				var others_left = data.players_remaining.length - 1;
 				if (others_left >= 0) {
@@ -186,16 +194,24 @@ $(document).ready(function(){
 		/* Socket functions for the play page. */
 
 		socket.on('reload_play_page', function(data) {
+			console.log("Received socket message: ", 'reload_play_page');
 			loadPlayPage(data);
 		});
 
 		socket.on('update_action', function(data) {
+			console.log("Received socket message: ", 'update_action');
+
+			var usernameList = [];
+			$(".playerInfoColumn h2").each(function(index, elem) {
+				usernameList.push($(this).text());
+			});
+
 			// Indent updates that are during a turn.
 			var startTag = "<li>";
 			if (!data.update.includes("started their turn")) {
 				startTag = "<li " + "style='margin-left: 25px;'" + ">"
 			}
-			else {
+			else { // Add a line break between each player's turn.
 				if ($("#updateActionList li").length > 0) {
 					startTag = "<br>" + startTag;
 				}
@@ -205,17 +221,22 @@ $(document).ready(function(){
 			var redSpan = "<span style='color: red;'>";
 
 			if (!data.update.includes("won the game")) {
-				if (data.update.includes("The dynamite")) {
-					var updateUsername = "";
-					var update = data.update;
-				}
-				else {
-					var spaceIndex = data.update.indexOf(" ");
-					var updateUsername = data.update.substring(0, spaceIndex);
-					var update = data.update.substring(spaceIndex);
-				}
+				var wordsInUpdate = data.update.split(' ');
+				var updateHtml = startTag;
 
-				$("#updateActionList").append(startTag + redSpan + updateUsername + "</span>" + update + "</li>");
+				for (var i = 0; i < wordsInUpdate.length; i++) {
+					if (usernameList.includes(wordsInUpdate[i])
+						|| usernameList.includes(wordsInUpdate[i].replace("'s", ''))
+						|| usernameList.includes(wordsInUpdate[i].replace(".", ''))
+						|| usernameList.includes(wordsInUpdate[i].replace(",", ''))) {
+						updateHtml += (redSpan + wordsInUpdate[i] + "</span>");
+					}
+					else {
+						updateHtml += wordsInUpdate[i];
+					}
+					updateHtml += ' ';
+				}
+				$("#updateActionList").append(updateHtml + "</li>");
 			}
 			else {
 				$("#updateActionList").append(startTag + redSpan + data.update + "</span>" + "</li>");
@@ -231,27 +252,33 @@ $(document).ready(function(){
 		});
 
 		socket.on('blur_card_selection', function(data) {
+			console.log("Received socket message: ", 'blur_card_selection');
 			addBlurToCards(data.cardNames);
 		});
 
 		socket.on('update_card_hand', function(data) {
+			console.log("Received socket message: ", 'update_card_hand');
 			createCardHand(data.cardInfo);
 		});
 
 		socket.on('update_cards_in_play', function(data) {
+			console.log("Received socket message: ", 'update_cards_in_play');
 			$("#cardsInPlayDiv").html("");
 			$("#cardsInPlayDiv").html(data.html);
 		});
 
 		socket.on('update_discard_pile', function(data) {
+			console.log("Received socket message: ", 'update_discard_pile');
 			$("#discardCardImage").attr("src", data.path);
 		});
 
 		socket.on('end_your_turn', function(data) {
+			console.log("Received socket message: ", 'end_your_turn');
 			socket.emit('ending_turn', username);
 		});
 
 		socket.on('update_player_list', function(data) {
+			console.log("Received socket message: ", 'update_player_list');
 			$(BOTTOM_HALF).html("");
 			$(BOTTOM_HALF).html(data.html);
 			
@@ -266,6 +293,7 @@ $(document).ready(function(){
 		});
 
 		socket.on('health_animation', function(data) {
+			console.log("Received socket message: ", 'health_animation');
 			var playerDiv = $('#player_div_' + data.username);
 			var divTop = playerDiv.offset().top;
 			var divPosTop = divTop - $(window).scrollTop();
@@ -277,16 +305,18 @@ $(document).ready(function(){
 			var playerDamageSpan = $("#player_damage_span_" + data.username);
 			playerDamageSpan.text((data.healthChange > 0 ? "+" : "") + data.healthChange.toString());
 			playerDamageSpan.animate({
-				top: "0px",
+				top: "-25px",
 				opacity: 0.5
 		  }, 5000, function() { playerDamageSpan.remove()});
 		});
 
 		socket.on('discard_click', function(data) {
+			console.log("Received socket message: ", 'discard_click');
 			addDiscardClickFunctions();
 		})
 
 		socket.on('game_over', function(data) {
+			console.log("Received socket message: ", 'game_over');
 			if (questionModalIsOpen()) { $(QUESTION_MODAL).dialog( "close" );	}
 			showInfoModal(data.html);
 
@@ -391,6 +421,12 @@ function showInfoModal(html) {
 		$(INFO_MODAL).draggable({
 		    handle: ".modal-header"
 		}); 
+
+
+		// Reset the modal's position once it's closed.
+		$(INFO_MODAL).on('hidden.bs.modal', function (e) {
+			$(this).css({top: 0, left: 0});
+		})
 	}
 }
 
@@ -467,6 +503,10 @@ function addDiscardClickFunctions() {
 
 function questionModalIsOpen() {
 	return $(QUESTION_MODAL).is(':visible');
+}
+
+function infoModalIsOpen() {
+	return $(INFO_MODAL).html() != '';
 }
 
 function waitingModalIsOpen() {
@@ -557,33 +597,37 @@ function rejoinGame() {
 /* Key press functions to enable players to send messages to the server using keyboard strokes. */
 
 $(document).keydown(function (e) {
-    keysPressed[e.which] = true;
-    var numKeys = Object.keys(keysPressed).length;
+	var isRepeating = !!keysPressed[e.which];
 
-    if (numKeys == 2) {
-	    if (16 in keysPressed) {
-		    if (e.which == 69) { // Shift-E, to end the turn.
-		    	socket.emit('ending_turn', username);
-		    }
+	if (!isRepeating) {
+	    keysPressed[e.which] = true;
+	    var numKeys = Object.keys(keysPressed).length;
 
-		    else if (e.which == 67) { // Shift-C, to cancel ending the turn if no cards have been discarded.
-		    	socket.emit('cancel_ending_turn', username);
-		    }
+	    if (numKeys == 2) {
+		    if (16 in keysPressed) {
+			    if (e.which == 69) { // Shift-E, to end the turn.
+			    	socket.emit('ending_turn', username);
+			    }
 
-		    else if (e.which == 83) { // Shift-S, to trigger a special ability when applicable.
-		    	socket.emit('use_special_ability', username);
-		    }
-		}
-	}
+			    else if (e.which == 67) { // Shift-C, to cancel ending the turn if no cards have been discarded.
+			    	socket.emit('cancel_ending_turn', username);
+			    }
 
-	if (numKeys == 1) {
-		if (13 in keysPressed) { // Enter, to close the info modal if it's open.
-			if ($(QUESTION_MODAL).is(':visible')) {
-				e.preventDefault();
+			    else if (e.which == 83) { // Shift-S, to trigger a special ability when applicable.
+			    	socket.emit('use_special_ability', username);
+			    }
 			}
+		}
 
-			if (!waitingModalIsOpen() && !emporioModalIsOpen()) {
-				closeInfoModal();
+		if (numKeys == 1) {
+			if (13 in keysPressed) { // Enter, to close the info modal if it's open.
+				if ($(QUESTION_MODAL).is(':visible') || (infoModalIsOpen() && $(INFO_MODAL).html().includes("Kit Carlson"))) {
+					e.preventDefault();
+				}
+
+				if (!waitingModalIsOpen() && !emporioModalIsOpen()) {
+					closeInfoModal();
+				}
 			}
 		}
 	}

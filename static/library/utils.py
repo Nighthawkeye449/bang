@@ -164,6 +164,10 @@ def getReverseFormat(formatString, s):
 	logGameplay("Result for reverse format of {} using string \"{}: {}\"".format(formatString, s, None if match == None else list(match.groups())))
 	return None if match == None else list(match.groups())
 
+def getCardNameValueSuitFromAnswer(answer):
+	name, value, suit = getReverseFormat(constants.QUESTION_CARD_FORMAT, answer)
+	return (convertDisplayNameToRaw(name), value, suit)
+
 def getCardsInPlayTemplate(player):
 	return Markup(render_template('cards_in_play.html', player=player))
 
@@ -263,7 +267,7 @@ def createDiscardTuples(discardTop, gamePlayers):
 	return createEmitTuples(constants.UPDATE_DISCARD_PILE, {'path': constants.CARD_IMAGES_PATH.format(discardTop.uid if discardTop != None else constants.FLIPPED_OVER)}, recipients=[p for p in gamePlayers])
 
 # Tuple to update the player order/lives/etc. for everybody.
-def createPlayerInfoListTuple(playerInfoList, player=None):
+def createPlayerInfoListTuple(playerInfoList, player):
 	return createEmitTuples(constants.UPDATE_PLAYER_LIST, {'html': getPlayerInfoListTemplate(playerInfoList)}, recipients=[p for p in playerInfoList] if player == None else [player])[0]
 
 def createDiscardClickTuples(player):
@@ -284,56 +288,58 @@ def createEmitTuples(emitString, data, recipients=[]):
 	return emitTuples
 
 def consolidateTuples(tuples):
-	logServer("Checking tuples for consolidation: {}".format(tuples))
+	if len(tuples) > 0:
+		logServer("Checking tuples for consolidation: {}".format(tuples))
 
-	# Remove any duplicates if there are any. Maintain the order and keep the newest versions.
-	nonDuplicated = []
-	for t in tuples[::-1]:
-		if t[0] == constants.SLEEP or t not in nonDuplicated:
-			nonDuplicated.append(t)
+		# Remove any duplicates if there are any. Maintain the order and keep the newest versions.
+		nonDuplicated = []
+		for t in tuples[::-1]:
+			if t[0] == constants.SLEEP or t not in nonDuplicated:
+				nonDuplicated.append(t)
 
-	if len(nonDuplicated) < len(tuples):
-		logServer("Tuples after removing duplicates: {}".format(tuples))
-	tuples = nonDuplicated[::-1]
+		if len(nonDuplicated) < len(tuples):
+			logServer("Tuples after removing duplicates: {}".format(tuples))
+		tuples = nonDuplicated[::-1]
 
-	# If a player got multiple updates to his/her card carousel, just use the last (i.e. most updated) one.
-	carouselDict = dict()
-	originalLen = len(tuples)
-	for t in tuples:
-		if t[0] == constants.UPDATE_CARD_HAND:
-			carouselDict[t[2].username] = t # Overwrite any older version.
+		# If a player got multiple updates to his/her card carousel, just use the last (i.e. most updated) one.
+		carouselDict = dict()
+		originalLen = len(tuples)
+		for t in tuples:
+			if t[0] == constants.UPDATE_CARD_HAND:
+				carouselDict[t[2].username] = t # Overwrite any older version.
 
-	tuples = [t for t in tuples if t[0] != constants.UPDATE_CARD_HAND or t in carouselDict.values()]
-	if len(tuples) != originalLen:
-		logServer("Tuples after removing card hand updates: {}".format(tuples))
+		tuples = [t for t in tuples if t[0] != constants.UPDATE_CARD_HAND or t in carouselDict.values()]
+		if len(tuples) != originalLen:
+			logServer("Tuples after removing card hand updates: {}".format(tuples))
 
-	# Finally, if there are SLEEPs in the tuples, consolidate by removing consecutive ones.
-	if any([tup[0] == constants.SLEEP for tup in tuples]):
-		for i in range(len(tuples) - 2, -1, -1):
-			if tuples[i][0] == constants.SLEEP and tuples[i+1][0] == constants.SLEEP:
-				tuples.pop(i+1)
-				newTuple = (constants.SLEEP, max(tuples[i][1], 1), None) 
-				tuples[i] = newTuple # Set the remaining sleep to 1 second at least.
-		
-		logServer("Consolidated SLEEPS in the tuples: {}".format(tuples))
+		# Finally, if there are SLEEPs in the tuples, consolidate by removing consecutive ones.
+		if any([tup[0] == constants.SLEEP for tup in tuples]):
+			for i in range(len(tuples) - 2, -1, -1):
+				if tuples[i][0] == constants.SLEEP and tuples[i+1][0] == constants.SLEEP:
+					tuples.pop(i+1)
+					newTuple = (constants.SLEEP, max(tuples[i][1], 1), None) 
+					tuples[i] = newTuple # Set the remaining sleep to 1 second at least.
+			
+			logServer("Consolidated SLEEPS in the tuples: {}".format(tuples))
 
-	# Remove any tuples that come after the game over tuples.
-	temp = list(tuples)
-	tuples = []
-	gameIsOver = False
-	for t in temp:
-		tuples.append(t)
-		
-		if t[0] == constants.UPDATE_ACTION and "won the game" in t[1]['update']:
-			gameIsOver = True
-		else:
-			if gameIsOver:
-				break
+		# Remove any tuples that come after the game over tuples.
+		temp = list(tuples)
+		tuples = []
+		gameIsOver = False
+		for t in temp:
+			tuples.append(t)
+			
+			if t[0] == constants.UPDATE_ACTION and "won the game" in t[1]['update']:
+				gameIsOver = True
+			else:
+				if gameIsOver and t[0]:
+					break
 
-	if gameIsOver:
-		tuples = [t for t in tuples if t[0] != constants.SHOW_QUESTION_MODAL]
+		if gameIsOver:
+			tuples = [t for t in tuples if t[0] != constants.SHOW_QUESTION_MODAL]
 
-	logServer("tuples after consolidating: {}".format(tuples))
+		logServer("tuples after consolidating: {}".format(tuples))
+	
 	return tuples
 
 	
