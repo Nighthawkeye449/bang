@@ -86,7 +86,7 @@ def getGameForPlayer(username):
 # Server setup
 app = Flask(__name__, static_url_path='/static', template_folder='templates')
 app.secret_key = 'secretkey1568486123168'
-socketio = SocketIO(app, async_handlers=False, always_connect=True, ping_timeout=7200, ping_interval=120)
+socketio = SocketIO(app, async_handlers=False, always_connect=True, ping_timeout=7200, ping_interval=3000)
 
 lock = Lock()
 
@@ -99,10 +99,10 @@ CONNECTED_USERS = dict()
 
 #################### Socket IO functions ####################
 
-# @socketio.on(KEEP_ALIVE)
-# def keepAlive(username):
-# 	CONNECTED_USERS[username] = request.sid
-# 	socketio.emit(KEEP_ALIVE, dict(), room=request.sid)
+@socketio.on(KEEP_ALIVE)
+def keepAlive(username):
+	CONNECTED_USERS[username] = request.sid
+	socketio.emit(KEEP_ALIVE, dict(), room=request.sid)
 
 @socketio.on(CONNECTED)
 def userConnected(username):

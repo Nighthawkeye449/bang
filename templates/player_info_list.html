@@ -7,7 +7,7 @@
     		{% if p.hasTheDynamite() %} <img style='max-width: 35%' src='{{ url_for('static', filename='/images/cards/actions/72.jpg')}}'> {% endif %}
     		{% if p.cardsInPlay|length > 0 %}
 	    		{% if p.jailStatus == 1 or p.hasTheDynamite() %}<br><br>{% endif %}
-	    		<span style='font-size: 15px;'>In play: 
+	    		<span style='font-size: 17.5px;'>In play: 
 	    		{% if p.cardsInPlay|length == 2 %} {{ p.cardsInPlay[0].getDisplayName() + ', ' + p.cardsInPlay[1].getDisplayName() }}
 	    		{% else %} {{ p.cardsInPlay[0].getDisplayName() }}
 	    		{% endif %}

@@ -1178,11 +1178,11 @@ class Gameplay(dict):
 		# If the player is still alive and has a character ability triggered by taking damage, process that here.
 		if player.isAlive():
 			if player.character.name == BART_CASSIDY: # Bart Cassidy draws a new card for every life point he's lost.
-				utils.logGameplay("{} drawing {} cards(s) because they {}".format(player.getLogString(), cardString, lostLivesString))
-				
 				self.drawCardsForPlayer(player, damage)
 
 				cardString = player.cardsInHand[-1].getDeterminerString() if damage == 1 else "{} cards".format(damage)
+				utils.logGameplay("{} drawing {} cards(s) because they {}".format(player.getLogString(), cardString, lostLivesString))
+				
 				emitTuples.append(utils.createCardCarouselTuple(player, player == self.playerOrder[0]))
 				emitTuples.extend(self.getDiscardTuples(self.getTopDiscardCard()))
 				emitTuples.append(utils.createInfoTuple("You drew {} because you lost {}!".format(cardString, lostLivesString), player))

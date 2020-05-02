@@ -35,7 +35,9 @@ $(document).ready(function(){
 		socket = io.connect('http://' + document.domain + ':' + location.port + '/', { forceNew: true, transports: ['websocket'] });
 		socket.emit('connected', username);
 
-		// setInterval(function() { socket.emit('keep_alive', username); }, 5000);
+		setInterval(function() { socket.emit('keep_alive', username); }, 15000);
+
+		socket.on('disconnect', function () { socket.emit('connected', username); });
 
 		/* Socket functions for showing the modals. */
 
