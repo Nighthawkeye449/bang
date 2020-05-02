@@ -16,7 +16,7 @@
 	            {% endfor %}
 	        </div>
 	        {% if p.cardsInPlay|length > 0 %}
-	    		<span style="font-size: 17.5px; color: white; margin-top: 3%;" class="centered centered_text">
+	    		<span style="font-size: 17.5px; color: white; margin-top: 2vh;" class="centered centered_text">
 	    		{% if p.cardsInPlay|length == 2 %} {{ p.cardsInPlay[0].getDisplayName() + ',  ' + p.cardsInPlay[1].getDisplayName() }}
 	    		{% else %} {{ p.cardsInPlay[0].getDisplayName() }}
 	    		{% endif %}
