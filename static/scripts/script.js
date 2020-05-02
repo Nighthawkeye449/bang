@@ -32,7 +32,7 @@ $(document).ready(function(){
 
 	// Connect to the socket server.
 	if (username.length > 0) {
-		socket = io.connect('http://' + document.domain + ':' + location.port + '/', { forceNew: true, transports: ['websocket'] });
+		socket = io.connect('http://' + document.domain + ':' + location.port + '/', { forceNew: true });
 		socket.emit('connected', username);
 
 		setInterval(function() { socket.emit('keep_alive', username); }, 15000);
@@ -424,10 +424,12 @@ function showInfoModal(html) {
 		    handle: ".modal-header"
 		}); 
 
+		$(INFO_MODAL).css({top: "20%", left: 0});
+
 
 		// Reset the modal's position once it's closed.
 		$(INFO_MODAL).on('hidden.bs.modal', function (e) {
-			$(this).css({top: 0, left: 0});
+			$(this).css({top: "20%", left: 0});
 		})
 	}
 }
@@ -517,6 +519,10 @@ function waitingModalIsOpen() {
 
 function emporioModalIsOpen() {
 	return $(INFO_MODAL).html().includes("Emporio</h4>") && !($(INFO_MODAL).html().includes("Everyone is done") || $(INFO_MODAL).html().includes("You picked up"));
+}
+
+function kitCarlsonModalIsOpen() {
+	return $(INFO_MODAL).html().includes("Kit Carlson")
 }
 
 function closeInfoModal() {
@@ -623,11 +629,11 @@ $(document).keydown(function (e) {
 
 		if (numKeys == 1) {
 			if (13 in keysPressed) { // Enter, to close the info modal if it's open.
-				if ($(QUESTION_MODAL).is(':visible') || (infoModalIsOpen() && $(INFO_MODAL).html().includes("Kit Carlson"))) {
+				if ($(QUESTION_MODAL).is(':visible')) {
 					e.preventDefault();
 				}
 
-				if (!waitingModalIsOpen() && !emporioModalIsOpen()) {
+				if (!waitingModalIsOpen() && !emporioModalIsOpen() && !kitCarlsonModalIsOpen()) {
 					closeInfoModal();
 				}
 			}

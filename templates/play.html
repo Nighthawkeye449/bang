@@ -41,7 +41,7 @@
              <img id="questionmark" src="{{ url_for('static', filename='images/questionmark.png') }}" data-toggle="tooltip" title="Shift-E: End turn<br><br>Shift-C: Cancel ending turn<br><br>Shift-S: Use ability, if ability can be triggered at any time">
             <br>
             <span id="usernameSpan" {% if player == playerInfoList[0] %} onclick="socket.emit('ending_turn', username);" {% endif %}>{{ player.username }}</span>
-            <button id="return-to-lobby-button" class="btn btn-danger" type="button" onclick="returnToLobby()">Return To Lobby</button>
+            <button id="return-to-lobby-button" class="btn btn-danger" type="button" onclick="returnToLobby()">Return To Lobbies</button>
         </div>
     </body>
 {% endblock %}

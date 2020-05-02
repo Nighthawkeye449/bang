@@ -499,7 +499,7 @@ class Gameplay(dict):
 			validTargets = self.getAllValidTargetsForCard(player, PRIGIONE)
 			if len(validTargets) > 0:
 				response = OK_MSG
-				emitTuples = [self.getQuestionModalWithOpponents(player, QUESTION_WHO_TO_JAIL)]
+				emitTuples = [self.getQuestionModalWithOpponents(player, QUESTION_WHO_TO_JAIL, opponents=validTargets)]
 
 			else:
 				response = "You can't jail anyone right now!"
@@ -1044,13 +1044,13 @@ class Gameplay(dict):
 
 		lostLivesString = "a life" if damage == 1 else "{} lives".format(damage)
 
-		if self.isEffectiveBang(player, self.currentCard.name): cardEffectString = "hit by the Bang"
+		if self.isEffectiveBang(attacker, self.currentCard.name): cardEffectString = "hit by the Bang"
 		elif self.currentCard.name == INDIANS: cardEffectString = "hit by the Indians"
 		elif self.currentCard.name == GATLING: cardEffectString = "hit by the Gatling"
 		elif self.currentCard.name == DUELLO: cardEffectString = "defeated in the Duello"
 		elif self.currentCard.name == DYNAMITE: cardEffectString = "hit by the exploding dynamite"
 		else:
-			utils.logError("{} shouldn't be able to lose a life with {} as the current card being played.".format(player.getLogString(), self.currentCard.name))
+			utils.logError("{} shouldn't be able to lose a life to {} being played by {}.".format(player.getLogString(), self.currentCard.name, attacker.username if attacker != None else 'None'))
 			return []
 
 		# Meaning the player is taking damage from dynamite.
@@ -1182,7 +1182,7 @@ class Gameplay(dict):
 
 				cardString = player.cardsInHand[-1].getDeterminerString() if damage == 1 else "{} cards".format(damage)
 				utils.logGameplay("{} drawing {} cards(s) because they {}".format(player.getLogString(), cardString, lostLivesString))
-				
+
 				emitTuples.append(utils.createCardCarouselTuple(player, player == self.playerOrder[0]))
 				emitTuples.extend(self.getDiscardTuples(self.getTopDiscardCard()))
 				emitTuples.append(utils.createInfoTuple("You drew {} because you lost {}!".format(cardString, lostLivesString), player))
@@ -1556,8 +1556,9 @@ class Gameplay(dict):
 		return players
 
 	def getQuestionModalWithOpponents(self, player, question, opponents=None):
-		aliveOpponents = self.getAliveOpponents(player.username) if opponents == None else opponents
-		return self.addQuestion(player, question, [p.username for p in aliveOpponents] + [NEVER_MIND])
+		if opponents == None:
+			opponents = self.getAliveOpponents(player.username)
+		return self.addQuestion(player, question, [p.username for p in opponents] + [NEVER_MIND])
 
 	def getAlivePlayers(self):
 		players = [p for p in self.playerOrder if p.isAlive()]
@@ -1803,7 +1804,13 @@ class Gameplay(dict):
 
 		emitTuples = []
 
-		if player.lives == player.lifeLimit:
+		if player.username in self.unansweredQuestions or player.username in self.playersWaitingFor:
+			return []
+
+		elif player == self.playerOrder[0] and self.discardingCards:
+			return [utils.createInfoTuple("You can't use your ability right now.", player)]
+
+		elif player.lives == player.lifeLimit:
 			return [utils.createInfoTuple(ALREADY_MAX_LIVES, player)]
 		
 		elif len(player.cardsInHand) < 2:
@@ -1823,6 +1830,7 @@ class Gameplay(dict):
 			
 			player.gainOneLife()
 			self.specialAbilityCards[SID_KETCHUM] = None
+			self.playersWaitingFor.remove(player.username)
 
 			emitTuples.append(utils.createInfoTuple("You've discarded 2 cards and gained a life.", player))
 			emitTuples.extend(self.createUpdates("{} used Sid Ketchum's ability to discard 2 cards and gain a life.".format(player.username)))
@@ -1833,6 +1841,7 @@ class Gameplay(dict):
 		# In this case, the player can discard 2 cards but needs to choose which 2 to discard.
 		else:
 			self.specialAbilityCards[SID_KETCHUM] = [] # Change this from None to indicate that the process of using the ability is ongoing.
+			self.playersWaitingFor.append(player.username)
 			emitTuples.append(utils.createInfoTuple(SID_KETCHUM_INFO, player))
 			emitTuples.extend(utils.createDiscardClickTuples(player))
 

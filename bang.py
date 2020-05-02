@@ -86,7 +86,7 @@ def getGameForPlayer(username):
 # Server setup
 app = Flask(__name__, static_url_path='/static', template_folder='templates')
 app.secret_key = 'secretkey1568486123168'
-socketio = SocketIO(app, async_handlers=False, always_connect=True, ping_timeout=7200, ping_interval=3000)
+socketio = SocketIO(app, async_handlers=False, always_connect=True, ping_timeout=45, ping_interval=15)
 
 lock = Lock()
 
@@ -251,7 +251,7 @@ def pickEmporioCard(username, uid):
 @socketio.on(KIT_CARLSON_CARD_PICKED)
 def pickKitCarlsonCard(username, uid):
 	if validResponse(username, (KIT_CARLSON_CARD_PICKED, uid)):
-		utils.logServer("Received socket message '{}' from {}: {}.".format(EMPORIO_CARD_PICKED, username, uid))
+		utils.logServer("Received socket message '{}' from {}: {}.".format(KIT_CARLSON_CARD_PICKED, username, uid))
 
 		game = getGameForPlayer(username)
 		with lock:
