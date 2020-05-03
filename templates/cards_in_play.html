@@ -1,3 +1,3 @@
-<span class="centered centered_text play-text-header">Your cards in play:</span><br>
+<span class="centered centered_text play-text-header">In-play cards:</span><br>
 <img id="cardInPlay0" src="{{ url_for('static', filename='images/cards/actions/' + ('flipped_over' if player.cardsInPlay|length == 0 else player.cardsInPlay[0].uid|string) + '.jpg') }}" class="centered centered_text zoom_hover_2 centered_image" style="max-width: 20%; padding-right: 5%; margin-top: auto; z-index: 100;">
 <img id="cardInPlay1" src="{{ url_for('static', filename='images/cards/actions/' + ('flipped_over' if player.cardsInPlay|length <= 1 else player.cardsInPlay[1].uid|string) + '.jpg') }}" class="centered centered_text zoom_hover_2 centered_image" style="max-width: 20%; padding-left: 5%; margin-top: auto; z-index: 100;">

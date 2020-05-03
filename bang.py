@@ -99,14 +99,15 @@ CONNECTED_USERS = dict()
 
 #################### Socket IO functions ####################
 
-@socketio.on(KEEP_ALIVE)
-def keepAlive(username):
-	CONNECTED_USERS[username] = request.sid
-	socketio.emit(KEEP_ALIVE, dict(), room=request.sid)
+# @socketio.on(KEEP_ALIVE)
+# def keepAlive(username):
+# 	CONNECTED_USERS[username] = request.sid
+# 	socketio.emit(KEEP_ALIVE, dict(), room=request.sid)
 
 @socketio.on(CONNECTED)
 def userConnected(username):
-	utils.logServer("Received socket message '{}' from {}.".format(CONNECTED, username))
+	if username not in CONNECTED_USERS:
+		utils.logServer("Received socket message '{}' from {}.".format(CONNECTED, username))
 	
 	CONNECTED_USERS[username] = request.sid
 

@@ -16,6 +16,7 @@ var LOBBY_USERNAMES = "#lobby_usernames";
 
 var cardsAreBlurred = false;
 var keysPressed = {};
+var healthAnimationCounter = 0;
 
 $(document).ready(function(){
 
@@ -35,9 +36,9 @@ $(document).ready(function(){
 		socket = io.connect('http://' + document.domain + ':' + location.port + '/', { forceNew: true });
 		socket.emit('connected', username);
 
-		setInterval(function() { socket.emit('keep_alive', username); }, 15000);
+		setInterval(function() { socket.emit('connected', username); }, 5000);
 
-		socket.on('disconnect', function () { socket.emit('connected', username); });
+		socket.on('disconnect', function () { console.log(username + "DISCONNECTED. TRYING TO RECONNECT."); socket.emit('connected', username); });
 
 		/* Socket functions for showing the modals. */
 
@@ -295,16 +296,21 @@ $(document).ready(function(){
 		});
 
 		socket.on('health_animation', function(data) {
-			console.log("Received socket message: ", 'health_animation');
+			console.log("Received socket message: ", 'health_animation', data);
+
+			healthAnimationCounter++;
 			var playerDiv = $('#player_div_' + data.username);
 			var divTop = playerDiv.offset().top;
 			var divPosTop = divTop - $(window).scrollTop();
 			var divLeft = playerDiv.offset().left;
 			var divPosLeft = divLeft - $(window).scrollLeft();
-			
-			$("body").append('<span id="player_damage_span_' + data.username + '" style="font-size: 35px; font-style: italic; color: ' + (data.healthChange < 0 ? "red" : "limegreen") +
+			var animationColor = data.healthChange < 0 ? "red" : "limegreen";
+
+			console.log(data.username, data.healthChange, "animation color will be " + animationColor);
+
+			$("body").append('<span id="player_damage_span_' + (data.username + healthAnimationCounter.toString()) + '" style="font-size: 35px; font-style: italic; color: ' + animationColor +
 								'; z-index: 200; position: absolute; top: ' + divPosTop.toString() + '; left: ' + (divPosLeft + (playerDiv.width() / 2)).toString() + ' "></span>');
-			var playerDamageSpan = $("#player_damage_span_" + data.username);
+			var playerDamageSpan = $("#player_damage_span_" + (data.username + healthAnimationCounter.toString()));
 			playerDamageSpan.text((data.healthChange > 0 ? "+" : "") + data.healthChange.toString());
 			playerDamageSpan.animate({
 				top: "-25px",
@@ -506,23 +512,24 @@ function addDiscardClickFunctions() {
 }
 
 function questionModalIsOpen() {
-	return $(QUESTION_MODAL).is(':visible');
+	return !(isNullOrUndefined($(QUESTION_MODAL).html())) && $(QUESTION_MODAL).is(':visible');
 }
 
 function infoModalIsOpen() {
-	return $(INFO_MODAL).html() != '';
+	return !(isNullOrUndefined($(INFO_MODAL).html())) && $(INFO_MODAL).html() != '';
 }
 
 function waitingModalIsOpen() {
-	return $(INFO_MODAL).html().includes("Waiting");
+	return !(isNullOrUndefined($(INFO_MODAL).html())) && $(INFO_MODAL).html().includes("Waiting");
 }
 
 function emporioModalIsOpen() {
-	return $(INFO_MODAL).html().includes("Emporio</h4>") && !($(INFO_MODAL).html().includes("Everyone is done") || $(INFO_MODAL).html().includes("You picked up"));
+	return !(isNullOrUndefined($(INFO_MODAL).html())) && $(INFO_MODAL).html().includes("Emporio</h4>") &&
+			!($(INFO_MODAL).html().includes("Everyone is done") || $(INFO_MODAL).html().includes("You picked up"));
 }
 
 function kitCarlsonModalIsOpen() {
-	return $(INFO_MODAL).html().includes("Kit Carlson")
+	return !(isNullOrUndefined($(INFO_MODAL).html())) && $(INFO_MODAL).html().includes("Kit Carlson");
 }
 
 function closeInfoModal() {
@@ -574,8 +581,9 @@ function createCardHand(cardInfo) {
 		}
 	}
 
-	var cardText = cardInfo.length > 0 ? "Cards in your hand:" : "You have no cards in your hand."
-	$("#" + cardsInHandSpanId).text(cardText);
+	var usernameText = "<span style='color: red;'>" + username + "</span>, ";
+	var cardText = cardInfo.length > 0 ? "your cards:" : "you have no cards in your hand."
+	$("#" + cardsInHandSpanId).html(usernameText + cardText);
 	$("#" + cardsInHandSpanId).css("margin-top", "3%");
 	$("#" + cardsInHandSpanId).addClass("play-text-header");
 }

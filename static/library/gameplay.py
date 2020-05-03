@@ -735,7 +735,7 @@ class Gameplay(dict):
 		return nextPlayer
 
 	def isEffectiveBang(self, player, cardName):
-		isBang = cardName == BANG or (player.character.name == CALAMITY_JANET and cardName == MANCATO)
+		isBang = cardName == BANG or (player != None and player.character.name == CALAMITY_JANET and cardName == MANCATO)
 		utils.logGameplay("Checking effective Bang: {} and {} -> {}".format(player, cardName, isBang))
 		return isBang
 
