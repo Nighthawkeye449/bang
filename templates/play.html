@@ -37,7 +37,7 @@
             <div id="bottomHalfDiv" class="row">
                 {{ playerInfoListTemplate }}
             </div>
-             <img id="questionmark" src="{{ url_for('static', filename='images/questionmark.png') }}" data-toggle="tooltip" title="Shift-E: End turn<br><br>Shift-C: Cancel ending turn<br><br>Shift-S: Use ability, if ability can be triggered at any time">
+             <img id="questionmark" src="{{ url_for('static', filename='images/questionmark.png') }}" data-toggle="tooltip" title="Shift-E: End turn<br><br>Shift-C: Cancel the current action<br><br>Shift-S: Use ability, if ability can be triggered at any time">
             <button id="return-to-lobby-button" class="btn btn-danger" type="button" onclick="returnToLobby()">Return To Lobbies</button>
         </div>
     </body>

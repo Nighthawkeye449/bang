@@ -38,14 +38,19 @@ $(document).ready(function(){
 
 		setInterval(function() { socket.emit('connected', username); }, 5000);
 
-		socket.on('disconnect', function () { console.log(username + "DISCONNECTED. TRYING TO RECONNECT."); socket.emit('connected', username); });
+		socket.on('disconnect', function () {
+			socket.emit('connected', username);
+			setTimeout(function() {
+				socket.emit('rejoin_game', username);
+			}, 1000);
+		});
 
 		/* Socket functions for showing the modals. */
 
 		socket.on('show_info_modal', function(data) {
 			if (isNullOrUndefined($(INFO_MODAL).html())) { // Undefined if the message was received before the page was rendered.
 				var html = data.html;
-				socket.emit("info_modal_undefined", username, html);
+				socket.emit('info_modal_undefined', username, html);
 			}
 			else {
 				showInfoModal(data.html);
@@ -68,7 +73,7 @@ $(document).ready(function(){
 				var option7 = data.option7;
 				var html = data.html;
 				var question = data.question;
-				socket.emit("question_modal_undefined", username, option1, option2, option3, option4, option5, option6, option7, html, question);
+				socket.emit('question_modal_undefined', username, option1, option2, option3, option4, option5, option6, option7, html, question);
 			}
 			else
 			{
@@ -83,13 +88,13 @@ $(document).ready(function(){
 				var question = data.question;
 				var d = {};
 
-				d[data.option1] = function() { socket.emit("question_modal_answered", username, question, data.option1); $( this ).dialog( "close" ); };
-				d[data.option2] = function() { socket.emit("question_modal_answered", username, question, data.option2); $( this ).dialog( "close" ); };
-				if (!isNullOrUndefined(data.option3)) { d[data.option3] = function() { socket.emit("question_modal_answered", username, question, data.option3); $( this ).dialog( "close" ); }; }
-				if (!isNullOrUndefined(data.option4)) { d[data.option4] = function() { socket.emit("question_modal_answered", username, question, data.option4); $( this ).dialog( "close" ); }; }
-				if (!isNullOrUndefined(data.option5)) { d[data.option5] = function() { socket.emit("question_modal_answered", username, question, data.option5); $( this ).dialog( "close" ); }; }
-				if (!isNullOrUndefined(data.option6)) { d[data.option6] = function() { socket.emit("question_modal_answered", username, question, data.option6); $( this ).dialog( "close" ); }; }
-				if (!isNullOrUndefined(data.option7)) { d[data.option7] = function() { socket.emit("question_modal_answered", username, question, data.option7); $( this ).dialog( "close" ); }; }
+				d[data.option1] = function() { socket.emit('question_modal_answered', username, question, data.option1); $( this ).dialog( "close" ); };
+				d[data.option2] = function() { socket.emit('question_modal_answered', username, question, data.option2); $( this ).dialog( "close" ); };
+				if (!isNullOrUndefined(data.option3)) { d[data.option3] = function() { socket.emit('question_modal_answered', username, question, data.option3); $( this ).dialog( "close" ); }; }
+				if (!isNullOrUndefined(data.option4)) { d[data.option4] = function() { socket.emit('question_modal_answered', username, question, data.option4); $( this ).dialog( "close" ); }; }
+				if (!isNullOrUndefined(data.option5)) { d[data.option5] = function() { socket.emit('question_modal_answered', username, question, data.option5); $( this ).dialog( "close" ); }; }
+				if (!isNullOrUndefined(data.option6)) { d[data.option6] = function() { socket.emit('question_modal_answered', username, question, data.option6); $( this ).dialog( "close" ); }; }
+				if (!isNullOrUndefined(data.option7)) { d[data.option7] = function() { socket.emit('question_modal_answered', username, question, data.option7); $( this ).dialog( "close" ); }; }
 
 				$(QUESTION_MODAL).css("display", "block");
 				$(QUESTION_MODAL).html(data.html)
@@ -114,14 +119,12 @@ $(document).ready(function(){
 		});
 
 		socket.on('show_waiting_modal', function(data) {
-			console.log("Received socket message: ", 'show_waiting_modal');
 			showInfoModal(data.html);
 		});
 
 		/* Socket functions for waiting in the lobby. */
 
 		socket.on('lobby_player_update', function(data) {
-			console.log("Received socket message: ", 'lobby_player_update');
 			var players = data.usernames;
 			var lobby_players_list_string = '';
 
@@ -148,12 +151,10 @@ $(document).ready(function(){
 		});
 
 		socket.on('reload_lobby', function(data) {
-			console.log("Received socket message: ", 'reload_lobby');
 			loadHtml(data.html);
 		});
 
 		socket.on('start_game', function(data) {
-			console.log("Received socket message: ", 'start_game');
 			var xhr = new XMLHttpRequest();
 
 			xhr.onreadystatechange = function() {
@@ -172,7 +173,6 @@ $(document).ready(function(){
 		/* Socket functions for setup. */
 
 		socket.on('character_was_set', function(data) {
-			console.log("Received socket message: ", 'character_was_set');
 			if (data.players_remaining.includes(username)) {
 				var others_left = data.players_remaining.length - 1;
 				if (others_left >= 0) {
@@ -197,13 +197,10 @@ $(document).ready(function(){
 		/* Socket functions for the play page. */
 
 		socket.on('reload_play_page', function(data) {
-			console.log("Received socket message: ", 'reload_play_page');
 			loadPlayPage(data);
 		});
 
 		socket.on('update_action', function(data) {
-			console.log("Received socket message: ", 'update_action');
-
 			var usernameList = [];
 			$(".playerInfoColumn h2").each(function(index, elem) {
 				usernameList.push($(this).text());
@@ -255,33 +252,27 @@ $(document).ready(function(){
 		});
 
 		socket.on('blur_card_selection', function(data) {
-			console.log("Received socket message: ", 'blur_card_selection');
 			addBlurToCards(data.cardNames);
 		});
 
 		socket.on('update_card_hand', function(data) {
-			console.log("Received socket message: ", 'update_card_hand');
 			createCardHand(data.cardInfo);
 		});
 
 		socket.on('update_cards_in_play', function(data) {
-			console.log("Received socket message: ", 'update_cards_in_play');
 			$("#cardsInPlayDiv").html("");
 			$("#cardsInPlayDiv").html(data.html);
 		});
 
 		socket.on('update_discard_pile', function(data) {
-			console.log("Received socket message: ", 'update_discard_pile');
 			$("#discardCardImage").attr("src", data.path);
 		});
 
 		socket.on('end_your_turn', function(data) {
-			console.log("Received socket message: ", 'end_your_turn');
 			socket.emit('ending_turn', username);
 		});
 
 		socket.on('update_player_list', function(data) {
-			console.log("Received socket message: ", 'update_player_list');
 			$(BOTTOM_HALF).html("");
 			$(BOTTOM_HALF).html(data.html);
 			
@@ -296,8 +287,6 @@ $(document).ready(function(){
 		});
 
 		socket.on('health_animation', function(data) {
-			console.log("Received socket message: ", 'health_animation', data);
-
 			healthAnimationCounter++;
 			var playerDiv = $('#player_div_' + data.username);
 			var divTop = playerDiv.offset().top;
@@ -305,8 +294,6 @@ $(document).ready(function(){
 			var divLeft = playerDiv.offset().left;
 			var divPosLeft = divLeft - $(window).scrollLeft();
 			var animationColor = data.healthChange < 0 ? "red" : "limegreen";
-
-			console.log(data.username, data.healthChange, "animation color will be " + animationColor);
 
 			$("body").append('<span id="player_damage_span_' + (data.username + healthAnimationCounter.toString()) + '" style="font-size: 35px; font-style: italic; color: ' + animationColor +
 								'; z-index: 200; position: absolute; top: ' + divPosTop.toString() + '; left: ' + (divPosLeft + (playerDiv.width() / 2)).toString() + ' "></span>');
@@ -319,12 +306,10 @@ $(document).ready(function(){
 		});
 
 		socket.on('discard_click', function(data) {
-			console.log("Received socket message: ", 'discard_click');
 			addDiscardClickFunctions();
-		})
+		});
 
 		socket.on('game_over', function(data) {
-			console.log("Received socket message: ", 'game_over');
 			if (questionModalIsOpen()) { $(QUESTION_MODAL).dialog( "close" );	}
 			showInfoModal(data.html);
 
@@ -334,10 +319,18 @@ $(document).ready(function(){
 			});
 
 			// Replace the player's username and the question mark with a button for returning to the lobby.
-			$("#usernameSpan").hide();
 			$("#questionmark").hide();
 			$("#return-to-lobby-button").css("display", "block");
-		})
+		});
+
+		socket.on('create_click_on_players', function(data) {
+			$(".playerInfoColumn").each(function(index, elem) {
+				var playerUsername = $(this).attr("id").substring("player_div_".length);
+				if (playerUsername != username) {
+					$(this).attr("onClick", "playerClickedOn('" + playerUsername + "', '" + data.clickType + "')");
+				}
+			});
+		});
 	}
 });
 
@@ -431,22 +424,16 @@ function showInfoModal(html) {
 		}); 
 
 		$(INFO_MODAL).css({top: "20%", left: 0});
-
-
-		// Reset the modal's position once it's closed.
-		$(INFO_MODAL).on('hidden.bs.modal', function (e) {
-			$(this).css({top: "20%", left: 0});
-		})
 	}
 }
 
 function playCard(uid) {
-	if (!cardsAreBlurred) {	socket.emit('validate_card_choice', username, uid); }
+	if (!cardsAreBlurred) { socket.emit('validate_card_choice', username, uid); }
 }
 
 function playBlurCard(uid) {
 	socket.emit('blur_card_played', username, uid);
-	removeBlurFromCards();
+	cardsAreBlurred = false;
 }
 
 function discardCard(uid) {
@@ -582,7 +569,7 @@ function createCardHand(cardInfo) {
 	}
 
 	var usernameText = "<span style='color: red;'>" + username + "</span>, ";
-	var cardText = cardInfo.length > 0 ? "your cards:" : "you have no cards in your hand."
+	var cardText = cardInfo.length > 0 ? "your current hand is:" : "you have no cards in your hand."
 	$("#" + cardsInHandSpanId).html(usernameText + cardText);
 	$("#" + cardsInHandSpanId).css("margin-top", "3%");
 	$("#" + cardsInHandSpanId).addClass("play-text-header");
@@ -603,11 +590,15 @@ function setImageAfterLoading(img){
 }
 
 function returnToLobby() {
-	socket.emit("return_to_lobby", username);
+	socket.emit('return_to_lobby', username);
 }
 
 function rejoinGame() {
-	socket.emit("rejoin_game", username)
+	socket.emit('rejoin_game', username);
+}
+
+function playerClickedOn(targetName, clickType) {
+	socket.emit('player_clicked_on', username, targetName, clickType);
 }
 
 /* Key press functions to enable players to send messages to the server using keyboard strokes. */
@@ -625,8 +616,8 @@ $(document).keydown(function (e) {
 			    	socket.emit('ending_turn', username);
 			    }
 
-			    else if (e.which == 67) { // Shift-C, to cancel ending the turn if no cards have been discarded.
-			    	socket.emit('cancel_ending_turn', username);
+			    else if (e.which == 67) { // Shift-C, to cancel the current action.
+			    	socket.emit('cancel_current_action', username);
 			    }
 
 			    else if (e.which == 83) { // Shift-S, to trigger a special ability when applicable.

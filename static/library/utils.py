@@ -23,7 +23,7 @@ def createSavePath():
 
 def saveGame(game):
 	path = getLocalFilePath(constants.JSON_GAME_PATH)
-	
+
 	with open(path, 'w+') as file:
 		file.write(jsonpickle.encode(game))
 
@@ -174,6 +174,12 @@ def getCardsInPlayTemplate(player):
 def getPlayerInfoListTemplate(playerInfoList):
 	return Markup(render_template('player_info_list.html', playerInfoList=playerInfoList))
 
+def createClickOnPlayersTuples(player, infoMsg, clickType):
+	if clickType != constants.JESSE_JONES_CLICK:
+		infoMsg += " Press Shift-C to cancel."
+	
+	return [createInfoTuple(infoMsg, player), (constants.CREATE_CLICK_ON_PLAYERS, {'clickType': clickType}, player)]
+
 def createCardsDrawnTuple(player, description, cardsDrawn, startingTurn=True):
 	cardsDrawnImagesTemplate = Markup(render_template('/modals/card_images.html', cards=cardsDrawn))
 	data = {'html': render_template('/modals/cards_drawn.html', player=player, startingTurn=startingTurn, cardsDrawnImagesTemplate=cardsDrawnImagesTemplate, description=Markup(description))}
@@ -249,7 +255,7 @@ def createEmporioTuples(alivePlayers, cardsLeft, playerPicking):
 
 def createKitCarlsonTuple(player, cardChoices):
 	cardImagesTemplate = Markup(render_template('/modals/card_images.html', cards=cardChoices, clickFunction="pickKitCarlsonCard"))
-	text = "Kit Carlson, click on the card that you don't want to keep:"
+	text = "Kit Carlson, click on the card that you DON'T want to keep:"
 	data = {'html': render_template('/modals/unclosable.html', text=text, header="Drawing Cards", cardsTemplate=cardImagesTemplate, playerIsDead=False)}		
 
 	return createEmitTuples(constants.SHOW_INFO_MODAL, dict(data), recipients=[player])[0]

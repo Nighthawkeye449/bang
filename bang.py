@@ -1,6 +1,7 @@
 import eventlet
 eventlet.monkey_patch()
 
+from engineio.payload import Payload
 from flask import Flask, request, render_template, make_response, redirect, url_for, session, abort, send_from_directory, jsonify
 from flask_socketio import SocketIO, send, emit, join_room, leave_room
 from pathlib import Path
@@ -43,7 +44,7 @@ def validResponse(username, responseInfo):
 
 			SOCKET_MESSAGE_TIMESTAMPS[username] = time.time()
 			SOCKET_MESSAGE_HISTORY[username] = responseInfo
-			minTimeDifference = 1 if responseInfo not in [ENDING_TURN, CANCEL_ENDING_TURN] else 2
+			minTimeDifference = 1 if responseInfo not in [ENDING_TURN, CANCEL_CURRENT_ACTION] else 2
 
 			if responseInfo != previousInfo or time.time() - previousTime >= minTimeDifference:
 				return True
@@ -84,9 +85,10 @@ def getGameForPlayer(username):
 	return Gameplay()
 
 # Server setup
+Payload.max_decode_packets = 200
 app = Flask(__name__, static_url_path='/static', template_folder='templates')
 app.secret_key = 'secretkey1568486123168'
-socketio = SocketIO(app, async_handlers=False, always_connect=True, ping_timeout=45, ping_interval=15)
+socketio = SocketIO(app, async_handlers=False, always_connect=False, ping_timeout=45, ping_interval=15)
 
 lock = Lock()
 
@@ -260,6 +262,17 @@ def pickKitCarlsonCard(username, uid):
 
 		emitTuples(tuples)
 
+@socketio.on(PLAYER_CLICKED_ON)
+def jesseJonesClick(username, targetName, clickType):
+	if validResponse(username, (PLAYER_CLICKED_ON, targetName, clickType)):
+		utils.logServer("Received socket message '{}' from {}: {}.".format(PLAYER_CLICKED_ON, username, (targetName, clickType)))
+
+		game = getGameForPlayer(username)
+		with lock:
+			tuples = game.processPlayerClickedOn(username, targetName, clickType)
+
+		emitTuples(tuples)
+
 @socketio.on(ENDING_TURN)
 def endingTurn(username):
 	if validResponse(username, ENDING_TURN):
@@ -271,14 +284,14 @@ def endingTurn(username):
 		
 		emitTuples(tuples)
 
-@socketio.on(CANCEL_ENDING_TURN)
+@socketio.on(CANCEL_CURRENT_ACTION)
 def cancelEndingTurn(username):
-	if validResponse(username, CANCEL_ENDING_TURN):
-		utils.logServer("Received socket message '{}' from {}.".format(CANCEL_ENDING_TURN, username))
+	if validResponse(username, CANCEL_CURRENT_ACTION):
+		utils.logServer("Received socket message '{}' from {}.".format(CANCEL_CURRENT_ACTION, username))
 
 		game = getGameForPlayer(username)
 		with lock:
-			tuples = game.cancelEndingTurn(username)
+			tuples = game.cancelCurrentAction(username)
 
 		emitTuples(tuples)
 
@@ -409,6 +422,7 @@ def lobby():
 		
 		# Create a new game for this lobby.
 		LOBBY_GAME_DICT[lobbyNumber] = Gameplay()
+		LOBBY_GAME_DICT[lobbyNumber].lobbyNumber = lobbyNumber
 	
 	game = LOBBY_GAME_DICT[lobbyNumber]
 	USER_LOBBY_DICT[username] = lobbyNumber
