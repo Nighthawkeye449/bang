@@ -148,7 +148,7 @@ SID_KETCHUM_INFO = "Click on the 2 cards in your hand that you want to discard i
 JESSE_JONES_CLICK = "jesse_jones_click"
 TARGETED_CARD_PLAYER_CLICK = "targeted_card_player_click"
 
-JSON_GAME_PATH = "game_saves/game.json"
+JSON_GAME_PATH = "game_saves/{}.json"
 OK_MSG = "OK"
 EMPTY_RESPONSE = ('', 204)
 FLIPPED_OVER = "flipped_over"

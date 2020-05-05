@@ -79,10 +79,10 @@ def getGameForPlayer(username):
 	if username in USER_LOBBY_DICT:
 		lobby = USER_LOBBY_DICT[username]
 
-		if lobby in LOBBY_GAME_DICT:
-			return LOBBY_GAME_DICT[lobby]
-	
-	return Gameplay()
+		if lobby not in LOBBY_GAME_DICT:
+			LOBBY_GAME_DICT[lobby] = utils.loadGame(lobby)
+		
+		return LOBBY_GAME_DICT[lobby]
 
 # Server setup
 Payload.max_decode_packets = 200
@@ -199,8 +199,7 @@ def cardWasPlayed(username, uid):
 
 @socketio.on(INFO_MODAL_UNDEFINED)
 def waitForInfoModal(username, html):
-	utils.logServer("Info modal load failed for {}. Waiting 1/100 of a second and trying again.".format(username))
-	time.sleep(0.01)
+	utils.logServer("Info modal load failed for {}. Trying again.".format(username))
 	
 	game = getGameForPlayer(username)
 	tup = (SHOW_INFO_MODAL, {'html': html}, game.players[username])
@@ -210,8 +209,7 @@ def waitForInfoModal(username, html):
 @socketio.on(QUESTION_MODAL_UNDEFINED)
 # 7 options because the most for any question would be listing 6 other player's usernames + "Never mind".
 def waitForQuestionModal(username, option1, option2, option3, option4, option5, option6, option7, html, question):
-	utils.logServer("Question modal load failed for {}. Waiting 1/100 of a second and trying again.".format(username))
-	time.sleep(0.01)
+	utils.logServer("Question modal load failed for {}. Trying again.".format(username))
 
 	game = getGameForPlayer(username)
 	tup = (SHOW_QUESTION_MODAL, {'option1': option1, 'option2': option2, 'option3': option3, 'option4': option4, 'option5': option5, 'option6': option6, 'option7': option7, 'html': html, 'question': question}, game.players[username])
@@ -423,6 +421,7 @@ def lobby():
 		# Create a new game for this lobby.
 		LOBBY_GAME_DICT[lobbyNumber] = Gameplay()
 		LOBBY_GAME_DICT[lobbyNumber].lobbyNumber = lobbyNumber
+		utils.createSavePath(lobbyNumber)
 	
 	game = LOBBY_GAME_DICT[lobbyNumber]
 	USER_LOBBY_DICT[username] = lobbyNumber
@@ -475,8 +474,6 @@ def checkUsernameValidity(username):
 if __name__ == '__main__':
 
 	utils.resetLogs()
-
-	utils.createSavePath()
 
 	signal(SIGINT, handler)
 

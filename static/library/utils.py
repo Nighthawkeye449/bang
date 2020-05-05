@@ -12,29 +12,26 @@ import numbers
 import os
 import re
 
-def createSavePath():
-	path = getLocalFilePath(constants.JSON_GAME_PATH)
+def createSavePath(lobbyNumber):
+	path = getLocalFilePath(constants.JSON_GAME_PATH.format(lobbyNumber))
 
 	if not os.path.exists(path):
 		try:
 			os.makedirs(os.path.dirname(path))
+			logServer("Created new game save path at {}".format(path))
 		except FileExistsError:
 			pass
 
 def saveGame(game):
-	path = getLocalFilePath(constants.JSON_GAME_PATH)
+	path = getLocalFilePath(constants.JSON_GAME_PATH.format(game.lobbyNumber))
 
 	with open(path, 'w+') as file:
 		file.write(jsonpickle.encode(game))
 
-def loadGame():
-	try:
-		with open(getLocalFilePath(constants.JSON_GAME_PATH), 'r') as file:
-			loadedGame = jsonpickle.decode(file.read())
-	
-	except FileNotFoundError:
-		utils.logServer("No JSON file found - creating a new one.")
-		loadedGame = createDefaultGame()
+def loadGame(lobbyNumber):
+	with open(getLocalFilePath(constants.JSON_GAME_PATH.format(lobbyNumber)), 'r') as file:
+		loadedGame = jsonpickle.decode(file.read())
+		logServer("Loaded game for lobby {} from save file.".format(lobbyNumber))
 	
 	return loadedGame
 
@@ -174,11 +171,8 @@ def getCardsInPlayTemplate(player):
 def getPlayerInfoListTemplate(playerInfoList):
 	return Markup(render_template('player_info_list.html', playerInfoList=playerInfoList))
 
-def createClickOnPlayersTuples(player, infoMsg, clickType):
-	if clickType != constants.JESSE_JONES_CLICK:
-		infoMsg += " Press Shift-C to cancel."
-	
-	return [createInfoTuple(infoMsg, player), (constants.CREATE_CLICK_ON_PLAYERS, {'clickType': clickType}, player)]
+def createClickOnPlayersTuple(player, clickType):
+	return (constants.CREATE_CLICK_ON_PLAYERS, {'clickType': clickType}, player)
 
 def createCardsDrawnTuple(player, description, cardsDrawn, startingTurn=True):
 	cardsDrawnImagesTemplate = Markup(render_template('/modals/card_images.html', cards=cardsDrawn))
@@ -190,7 +184,6 @@ def createGameOverTuple(player, msg):
 	data = {'html': render_template('/modals/info.html', text=msg, header="Game Over!")}
 
 	return createEmitTuples(constants.GAME_OVER, data, [player])[0]
-
 
 # Tuples to show information in players' information modals.
 def createInfoTuple(text, player, header=None, cards=None):
@@ -318,14 +311,10 @@ def consolidateTuples(tuples):
 		if len(tuples) != originalLen:
 			logServer("Tuples after removing card hand updates: {}".format(tuples))
 
-		# Finally, if there are SLEEPs in the tuples, consolidate by removing consecutive ones.
-		if any([tup[0] == constants.SLEEP for tup in tuples]):
-			for i in range(len(tuples) - 2, -1, -1):
-				if tuples[i][0] == constants.SLEEP and tuples[i+1][0] == constants.SLEEP:
-					tuples.pop(i+1)
-					newTuple = (constants.SLEEP, max(tuples[i][1], 1), None) 
-					tuples[i] = newTuple # Set the remaining sleep to 1 second at least.
-			
+		# If there are SLEEPs in the tuples, remove any extra SLEEPs that are for the automatic duration.
+		automaticSleepTups = [t for t in tuples if t[0] == constants.SLEEP and t[1] == constants.AUTOMATIC_SLEEP_DURATION]
+		if len(automaticSleepTups) > 0:
+			tuples = [t for t in tuples if t[0] != constants.SLEEP or t == automaticSleepTups[0] or t[1] < constants.AUTOMATIC_SLEEP_DURATION]
 			logServer("Consolidated SLEEPS in the tuples: {}".format(tuples))
 
 		# Remove any tuples that come after the game over tuples.

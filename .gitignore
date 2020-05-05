@@ -106,3 +106,4 @@ tmp/
 logs/
 game.json
 game_backup.json
+game_saves/

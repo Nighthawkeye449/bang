@@ -120,10 +120,9 @@ class Gameplay(dict):
 		emitTuples = []
 
 		emitTuples.append((RELOAD_PLAY_PAGE, {'html': self.renderPlayPageForPlayer(username), 'cardInfo': player.getCardInfo(player == self.playerOrder[0])}, player))
-		emitTuples.append((SLEEP, 0.5, None))
+		emitTuples.append((SLEEP, 1, None))
 		emitTuples.append(utils.createCardCarouselTuple(player, player == self.playerOrder[0]))
 		emitTuples.append(utils.createCardsInPlayTuple(player))
-
 		emitTuples += [utils.createUpdateTupleForPlayer(update, player) for update in self.updatesList]
 
 		if not gameOver:
@@ -474,7 +473,7 @@ class Gameplay(dict):
 				else:
 					response = OK_MSG
 					utils.logGameplay("Adding player clicks for {} for Bang.".format(username))
-					emitTuples = utils.createClickOnPlayersTuples(player, "Click on the player you want to shoot.", TARGETED_CARD_PLAYER_CLICK)
+					emitTuples = [utils.createClickOnPlayersTuple(player, TARGETED_CARD_PLAYER_CLICK)]
 
 		elif card.name == MANCATO:
 			response = "You can't play a Mancato right now!"
@@ -485,7 +484,7 @@ class Gameplay(dict):
 				response = "There's nobody in range for {} right now!".format(card.getDeterminerString())
 			else:
 				response = OK_MSG
-				emitTuples = utils.createClickOnPlayersTuples(player, "Click on the player whose cards you want to target.", TARGETED_CARD_PLAYER_CLICK)
+				emitTuples = [utils.createClickOnPlayersTuple(player, TARGETED_CARD_PLAYER_CLICK)]
 
 		elif card.name == DUELLO:
 			response = OK_MSG
@@ -493,7 +492,7 @@ class Gameplay(dict):
 			if len(aliveOpponents) == 1: # If there's only 1 alive opponent left, automatically play the Duello against him/her.
 				targetName = aliveOpponents[0].username
 			else:
-				emitTuples = utils.createClickOnPlayersTuples(player, "Click on the player you want to duel.", TARGETED_CARD_PLAYER_CLICK)
+				emitTuples = [utils.createClickOnPlayersTuple(player, TARGETED_CARD_PLAYER_CLICK)]
 
 		elif card.name == BIRRA:
 			if len(self.getAlivePlayers()) == 2:
@@ -526,7 +525,7 @@ class Gameplay(dict):
 			validTargets = self.getAllValidTargetsForCard(player, PRIGIONE)
 			if len(validTargets) > 0:
 				response = OK_MSG
-				emitTuples = utils.createClickOnPlayersTuples(player, "Click on the player you want to put in jail.", TARGETED_CARD_PLAYER_CLICK)
+				emitTuples = [utils.createClickOnPlayersTuple(player, TARGETED_CARD_PLAYER_CLICK)]
 
 			else:
 				response = "You can't jail anyone right now!"
@@ -663,6 +662,7 @@ class Gameplay(dict):
 				target.specialCards.append(card)
 
 				emitTuples.append(self.createInfoTuple("{} just put you in jail!".format(player.username), target))
+				emitTuples.append(self.createInfoTuple("You've put {} in jail.".format(target.username), player))
 				emitTuples.extend(self.createUpdates("{} put {} in jail.".format(player.username, target.username)))
 
 		if self.currentCardCanBeReset():
@@ -1110,17 +1110,30 @@ class Gameplay(dict):
 				updateText = "{} was {} and has been eliminated.".format(player.username, cardEffectString)
 				emitTuples.extend(self.createUpdates(updateText))
 				
-				if isGameOverResult != '':
+				# Process the game ending.
+				if isGameOverResult != None:
+					# "Eliminate" every player and remove all cards now that the game is over.
+					for p in self.playerOrder:
+						p.lives = 0
+						for c in [p.cardsInHand + p.getCardsOnTable()]:
+							self.discardCard(p, c)
+
 					emitTuples.extend([t for p in self.playerOrder for t in self.getPlayerReloadingTuples(p.username, gameOver=True)])
 					emitTuples.extend([utils.createGameOverTuple(p, isGameOverResult) for p in self.playerOrder])
 					emitTuples.extend(self.createUpdates(isGameOverResult))
 
-				else: # Emit message to everybody that the player died.
+				# Otherwise, emit to everybody that the player died.
+				else:
 					deadPlayerText = "You were {}! You've been eliminated! Better luck next time.".format(cardEffectString)
 					otherPlayersText = "{} was {} and has been eliminated!".format(player.username, cardEffectString)
+					attackerText = otherPlayersText.replace(self.getCurrentPlayerName() + "'s", "your") if attacker != None else None
 
 					emitTuples.append(self.createInfoTuple(deadPlayerText, player, header="Game Over!"))
-					emitTuples.extend([self.createInfoTuple(otherPlayersText, p) for p in self.playerOrder if p != player])
+					if attacker != None:
+						emitTuples.extend([self.createInfoTuple(otherPlayersText, p) for p in self.playerOrder if p not in [player, attacker]])
+						emitTuples.append(self.createInfoTuple(attackerText, attacker))
+					else:
+						emitTuples.extend([self.createInfoTuple(otherPlayersText, p) for p in self.playerOrder if p != player])
 
 					if player == self.playerOrder[0]:
 						emitTuples.append((END_YOUR_TURN, dict(), player))
@@ -1218,7 +1231,7 @@ class Gameplay(dict):
 				self.drawCardsForPlayer(player, damage)
 
 				cardString = player.cardsInHand[-1].getDeterminerString() if damage == 1 else "{} cards".format(damage)
-				utils.logGameplay("{} drawing {} cards(s) because they {}".format(player.getLogString(), cardString, lostLivesString))
+				utils.logGameplay("{} drawing {} because they lost {}".format(player.getLogString(), cardString, lostLivesString))
 
 				emitTuples.append(utils.createCardCarouselTuple(player, player == self.playerOrder[0]))
 				emitTuples.extend(self.getDiscardTuples(self.getTopDiscardCard()))
@@ -1270,9 +1283,14 @@ class Gameplay(dict):
 		else:
 			if not renegadeIsAlive and numAliveOutlaws == 0:
 				self.gameOver = True
-				return "The Sheriff and his Vices have won the game!"
+				if len(self.players) == 7:
+					return "The Sheriff and his Vices have won the game!"
+				elif 5 <= len(self.players) <= 6:
+					return "The Sheriff and Vice have won the game!"
+				else:
+					return "The Sheriff has won the game!"
 			else:
-				return '' # Indicates the game is not over.
+				return None # Indicates the game is not over.
 
 	def currentCardCanBeReset(self):
 		canBeReset = len(self.unansweredQuestions) == 0 and len(self.playersWaitingFor) == 0
@@ -1298,7 +1316,8 @@ class Gameplay(dict):
 			if answer == FROM_ANOTHER_PLAYER:
 				playersToDrawFrom = self.getPlayersWithCardsInHand(username)
 				if len(playersToDrawFrom) > 1:
-					emitTuples.extend(utils.createClickOnPlayersTuples(player, "Click on the player whose hand you want to draw from.", JESSE_JONES_CLICK))
+					emitTuples.append(self.createInfoTuple("Click on the player whose hand you want to draw from.", player))
+					emitTuples.append(utils.createClickOnPlayersTuple(player, JESSE_JONES_CLICK))
 				
 				# There's only 1 player Jesse Jones can draw from, so automatically draw from that player's hand.
 				else:
@@ -1549,7 +1568,7 @@ class Gameplay(dict):
 
 			emitTuples.append(utils.createCardCarouselTuple(nextPlayer, nextPlayer == self.playerOrder[0]))
 			emitTuples.extend(self.createUpdates(PICKED_UP_FROM_EMPORIO.format(nextPlayer.username, card.getDeterminerString())))
-			emitTuples.append(self.createInfoTuple("You automatically picked up {} from Emporio since all the cards left were the same.".format(card.getDeterminerString()), nextPlayer, cards=[card]))
+			emitTuples.append(self.createInfoTuple("You automatically picked up {} from Emporio.".format(card.getDeterminerString()), nextPlayer, cards=[card]))
 			
 			if self.emporioOptions:
 				playerIndex += 1
@@ -1710,7 +1729,7 @@ class Gameplay(dict):
 				emitTuples = self.createUpdates("{} tried to avoid the {} with a Barile but didn't draw a heart{}.".format(player.username, effectiveDisplayName, " either time" if jourdonnaisTriedTwice else ""))
 				
 				# The Barile wasn't a heart, so check if a Mancato can still be played to avoid the attack. Otherwise, automatically take the hit.
-				if self.currentCard.name == BANG: emitTuples.append(utils.createWaitingModalTuple(currentPlayer, "{} didn't draw a heart for Barile against {}. Waiting for them to react...".format(player.username, self.currentCard.getDisplayName())))
+				if self.currentCard.name == BANG: emitTuples.append(utils.createWaitingModalTuple(currentPlayer, "{} didn't draw a heart for Barile. Waiting for them to react...".format(player.username, self.currentCard.getDisplayName())))
 				if len(player.getCardTypeFromHand(MANCATO)) > 0:
 					emitTuples.append(self.addQuestion(player, QUESTION_BARILE_MANCATO.format(currentPlayer.username, effectiveDisplayName), [PLAY_A_MANCATO, LOSE_A_LIFE]))
 				else:

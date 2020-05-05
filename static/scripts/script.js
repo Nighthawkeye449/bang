@@ -15,8 +15,10 @@ var WAITING_FOR_SPAN = "#waitingForSpan";
 var LOBBY_USERNAMES = "#lobby_usernames";
 
 var cardsAreBlurred = false;
+var clickingOnPlayer = false;
 var keysPressed = {};
 var healthAnimationCounter = 0;
+var lastCardUid = 0;
 
 $(document).ready(function(){
 
@@ -42,15 +44,17 @@ $(document).ready(function(){
 			socket.emit('connected', username);
 			setTimeout(function() {
 				socket.emit('rejoin_game', username);
-			}, 1000);
+			}, 250);
 		});
 
 		/* Socket functions for showing the modals. */
 
 		socket.on('show_info_modal', function(data) {
 			if (isNullOrUndefined($(INFO_MODAL).html())) { // Undefined if the message was received before the page was rendered.
-				var html = data.html;
-				socket.emit('info_modal_undefined', username, html);
+				setTimeout(function() {
+					var html = data.html;
+					socket.emit('info_modal_undefined', username, html);
+				}, 100);
 			}
 			else {
 				showInfoModal(data.html);
@@ -64,16 +68,18 @@ $(document).ready(function(){
 			}
 
 			if (isNullOrUndefined($(QUESTION_MODAL).html())) { // Undefined if the message was received before the page was rendered.
-				var option1 = data.option1;
-				var option2 = data.option2;
-				var option3 = data.option3;
-				var option4 = data.option4;
-				var option5 = data.option5;
-				var option6 = data.option6;
-				var option7 = data.option7;
-				var html = data.html;
-				var question = data.question;
-				socket.emit('question_modal_undefined', username, option1, option2, option3, option4, option5, option6, option7, html, question);
+				setTimeout(function() {
+					var option1 = data.option1;
+					var option2 = data.option2;
+					var option3 = data.option3;
+					var option4 = data.option4;
+					var option5 = data.option5;
+					var option6 = data.option6;
+					var option7 = data.option7;
+					var html = data.html;
+					var question = data.question;
+					socket.emit('question_modal_undefined', username, option1, option2, option3, option4, option5, option6, option7, html, question);
+				}, 100);
 			}
 			else
 			{
@@ -249,6 +255,9 @@ $(document).ready(function(){
 			if ((/played a(n?) (Bang|Duello|Indians|Gatling)/.test(data.update) == false || (data.update.includes(" avoid"))) && !data.update.includes("won the game")) {
 				socket.emit('request_player_list', username);
 			}
+
+			// Reset the opacity on cards any time there's a new update.
+			setCardOpacity(false);
 		});
 
 		socket.on('blur_card_selection', function(data) {
@@ -287,22 +296,24 @@ $(document).ready(function(){
 		});
 
 		socket.on('health_animation', function(data) {
-			healthAnimationCounter++;
-			var playerDiv = $('#player_div_' + data.username);
-			var divTop = playerDiv.offset().top;
-			var divPosTop = divTop - $(window).scrollTop();
-			var divLeft = playerDiv.offset().left;
-			var divPosLeft = divLeft - $(window).scrollLeft();
-			var animationColor = data.healthChange < 0 ? "red" : "limegreen";
+			setTimeout(function() {
+				healthAnimationCounter++;
+				var playerDiv = $('#player_div_' + data.username);
+				var divTop = playerDiv.offset().top;
+				var divPosTop = divTop - $(window).scrollTop();
+				var divLeft = playerDiv.offset().left;
+				var divPosLeft = divLeft - $(window).scrollLeft();
+				var animationColor = data.healthChange < 0 ? "red" : "limegreen";
 
-			$("body").append('<span id="player_damage_span_' + (data.username + healthAnimationCounter.toString()) + '" style="font-size: 35px; font-style: italic; color: ' + animationColor +
-								'; z-index: 200; position: absolute; top: ' + divPosTop.toString() + '; left: ' + (divPosLeft + (playerDiv.width() / 2)).toString() + ' "></span>');
-			var playerDamageSpan = $("#player_damage_span_" + (data.username + healthAnimationCounter.toString()));
-			playerDamageSpan.text((data.healthChange > 0 ? "+" : "") + data.healthChange.toString());
-			playerDamageSpan.animate({
-				top: "-25px",
-				opacity: 0.5
-		  }, 5000, function() { playerDamageSpan.remove()});
+				$("body").append('<span id="player_damage_span_' + (data.username + healthAnimationCounter.toString()) + '" style="font-size: 35px; font-style: italic; color: ' + animationColor +
+									'; z-index: 200; position: absolute; top: ' + divPosTop.toString() + '; left: ' + (divPosLeft + (playerDiv.width() / 2)).toString() + ' "></span>');
+				var playerDamageSpan = $("#player_damage_span_" + (data.username + healthAnimationCounter.toString()));
+				playerDamageSpan.text((data.healthChange > 0 ? "+" : "") + data.healthChange.toString());
+				playerDamageSpan.animate({
+					top: "-25px",
+					opacity: 0.5
+			  }, 5000, function() { playerDamageSpan.remove()});
+			}, 500); // Wait for half a second in case the player's position changes.
 		});
 
 		socket.on('discard_click', function(data) {
@@ -324,12 +335,18 @@ $(document).ready(function(){
 		});
 
 		socket.on('create_click_on_players', function(data) {
+			clickingOnPlayer = true;
+
 			$(".playerInfoColumn").each(function(index, elem) {
 				var playerUsername = $(this).attr("id").substring("player_div_".length);
 				if (playerUsername != username) {
 					$(this).attr("onClick", "playerClickedOn('" + playerUsername + "', '" + data.clickType + "')");
 				}
 			});
+
+			if (data.clickType == "targeted_card_player_click") {
+				setCardOpacity(true, lastCardUid);
+			}
 		});
 	}
 });
@@ -425,10 +442,17 @@ function showInfoModal(html) {
 
 		$(INFO_MODAL).css({top: "20%", left: 0});
 	}
+
+	if (cardsAreBlurred) {
+		setCardOpacity(true, lastCardUid);
+	}
 }
 
 function playCard(uid) {
-	if (!cardsAreBlurred) { socket.emit('validate_card_choice', username, uid); }
+	if (!cardsAreBlurred && !clickingOnPlayer) {
+		socket.emit('validate_card_choice', username, uid);
+		lastCardUid = uid;
+	}
 }
 
 function playBlurCard(uid) {
@@ -446,7 +470,7 @@ function addBlurToCards(cardNames) {
 		var uid = $(this).attr("alt").split(' ')[1];
 		
 		if (!cardNames.includes(cardName)) {
-			$(this).addClass("blur");
+			$(this).css("opacity", 0.25);
 			$(this).css("z-index", 5);
 		}
 		else {
@@ -459,7 +483,7 @@ function addBlurToCards(cardNames) {
 
 function removeBlurFromCards() {
 	$(CARDS_IN_HAND_DIV).find("img").each(function() {
-		$(this).removeClass("blur");
+		$(this).css("opacity", 1);
 		$(this).removeAttr("onClick"); // If the player is the current player, the click function will be reset by the new cards.
 	});
 	
@@ -498,6 +522,34 @@ function addDiscardClickFunctions() {
 	});
 }
 
+function setCardOpacity(add, uid=-1) {
+	console.log("setting opacity", add, uid);
+	var cardId = '#hand_card_' + uid.toString();
+	var zindexDifference = 100;
+
+	if (add && $(cardId).length) {
+		cardsAreBlurred = true;
+
+		$(cardId).css("zIndex", (parseInt($(cardId).css("zIndex")) + zindexDifference).toString());
+
+		$(CARDS_IN_HAND_DIV + " img").each(function() {
+			if ($(this).attr("id") != cardId.substring(1)) {
+				$(this).css("opacity", 0.25);
+			}
+		});
+	}
+	else
+	{
+		cardsAreBlurred = false;
+
+		$(cardId).css("zIndex", (parseInt($(cardId).css("zIndex")) - zindexDifference).toString());
+		
+		$(CARDS_IN_HAND_DIV + " img").each(function() {
+			$(this).css("opacity", 1);
+		});
+	}
+}
+
 function questionModalIsOpen() {
 	return !(isNullOrUndefined($(QUESTION_MODAL).html())) && $(QUESTION_MODAL).is(':visible');
 }
@@ -525,6 +577,7 @@ function closeInfoModal() {
 }
 
 function createCardHand(cardInfo) {
+	lastCardUid = 0;
 	var minimumCardsForOverlap = 4;
 	var numberOfCards = cardInfo.length;
 
@@ -551,7 +604,7 @@ function createCardHand(cardInfo) {
 		for (var i = 0; i < numberOfCards; i++) {
 			var url = "static/images/cards/actions/" + cardInfo[i].uid.toString() + ".jpg";
 			var zoom_size = numberOfCards >= minimumCardsForOverlap ? (numberOfCards >= minimumCardsForOverlap * 2 ? "2" : "1_5") : "1_2"
-			var img = $('<img class="zoom_hover_' + zoom_size + '">');
+			var img = $('<img id="hand_card_' + cardInfo[i].uid.toString() + '" class="zoom_hover_' + zoom_size + '">');
 			img.attr('src', url);
 			img.attr('alt', cardInfo[i].name + " " + cardInfo[i].uid.toString())
 			
@@ -599,6 +652,7 @@ function rejoinGame() {
 
 function playerClickedOn(targetName, clickType) {
 	socket.emit('player_clicked_on', username, targetName, clickType);
+	clickingOnPlayer = false;
 }
 
 /* Key press functions to enable players to send messages to the server using keyboard strokes. */
@@ -618,6 +672,8 @@ $(document).keydown(function (e) {
 
 			    else if (e.which == 67) { // Shift-C, to cancel the current action.
 			    	socket.emit('cancel_current_action', username);
+		    		setCardOpacity(false);
+		    		clickingOnPlayer = false;
 			    }
 
 			    else if (e.which == 83) { // Shift-S, to trigger a special ability when applicable.
