@@ -11,6 +11,7 @@ import os
 import random
 import sys
 import time
+import traceback
 
 
 # Import local modules.
@@ -52,6 +53,17 @@ def validResponse(username, responseInfo):
 				utils.logServer("Not enough time has passed since {}'s last socket message ({}) for {}. Ignoring this one.".format(username, time.time() - previousTime, responseInfo))
 				return False
 
+def processGameSocketMessage(game, f):
+	gameJson = utils.saveGameToJson(game)
+
+	try:
+		tuples = f()
+		emitTuples(tuples)
+	except Exception as e:
+		LOBBY_GAME_DICT[game.lobbyNumber] = utils.loadGameFromJson(gameJson) # Revert the game state so that it's not potentially stuck in limbo.
+		utils.logError(traceback.format_exc())
+		utils.logGameplay("Exception caught in gameplay processing. Reverting the game state.")
+
 def emit(emitString, args=None, recipient=None):
 	if args != None and recipient != None:
 		socketio.emit(emitString, args, room=recipient.sid)
@@ -88,7 +100,7 @@ def getGameForPlayer(username):
 Payload.max_decode_packets = 200
 app = Flask(__name__, static_url_path='/static', template_folder='templates')
 app.secret_key = 'secretkey1568486123168'
-socketio = SocketIO(app, async_handlers=False, always_connect=False, ping_timeout=45, ping_interval=15)
+socketio = SocketIO(app, async_handlers=False, always_connect=True, ping_timeout=45, ping_interval=15)
 
 lock = Lock()
 
@@ -100,11 +112,6 @@ SOCKET_MESSAGE_HISTORY = dict()
 CONNECTED_USERS = dict()
 
 #################### Socket IO functions ####################
-
-# @socketio.on(KEEP_ALIVE)
-# def keepAlive(username):
-# 	CONNECTED_USERS[username] = request.sid
-# 	socketio.emit(KEEP_ALIVE, dict(), room=request.sid)
 
 @socketio.on(CONNECTED)
 def userConnected(username):
@@ -173,30 +180,6 @@ def setCharacter(username, character):
 	if tuples:
 		emitTuples(tuples)
 
-@socketio.on(CARD_WAS_DISCARDED)
-def cardWasDiscarded(username, uid):
-	if validResponse(username, (CARD_WAS_DISCARDED, uid)):
-		utils.logServer("Received socket message '{}' from {}: {}.".format(CARD_WAS_DISCARDED, username, uid))
-
-		game = getGameForPlayer(username)
-		card = game.getCardByUid(uid)
-
-		utils.logServer("Discarding {} ({}) by {}.".format(card.name, uid, username))
-		player = game.players[username]
-		with lock:
-			game.discardCard(player, card)
-
-@socketio.on(VALIDATE_CARD_CHOICE)
-def cardWasPlayed(username, uid):
-	if validResponse(username, (VALIDATE_CARD_CHOICE, uid)):
-		utils.logServer("Received socket message '{}' from {}: {}.".format(VALIDATE_CARD_CHOICE, username, uid))
-		
-		game = getGameForPlayer(username)
-		with lock:
-			tuples = game.validateCardChoice(username, uid)
-
-		emitTuples(tuples)
-
 @socketio.on(INFO_MODAL_UNDEFINED)
 def waitForInfoModal(username, html):
 	utils.logServer("Info modal load failed for {}. Trying again.".format(username))
@@ -216,16 +199,25 @@ def waitForQuestionModal(username, option1, option2, option3, option4, option5, 
 
 	emit(*tup)
 
+@socketio.on(VALIDATE_CARD_CHOICE)
+def cardWasPlayed(username, uid):
+	if validResponse(username, (VALIDATE_CARD_CHOICE, uid)):
+		utils.logServer("Received socket message '{}' from {}: {}.".format(VALIDATE_CARD_CHOICE, username, uid))
+		
+		game = getGameForPlayer(username)
+
+		with lock:
+			processGameSocketMessage(game, lambda: game.validateCardChoice(username, uid))
+
 @socketio.on(QUESTION_MODAL_ANSWERED)
 def questionModalAnswered(username, question, answer):
 	if validResponse(username, (QUESTION_MODAL_ANSWERED, question, answer)):
 		utils.logServer("Received socket message '{}' from {}: {} -> {}.".format(QUESTION_MODAL_ANSWERED, username, question, answer))
 
 		game = getGameForPlayer(username)
-		with lock:
-			tuples = game.processQuestionResponse(username, question, answer)
 
-		emitTuples(tuples)
+		with lock:
+			processGameSocketMessage(game, lambda: game.processQuestionResponse(username, question, answer))
 
 @socketio.on(BLUR_CARD_PLAYED)
 def playBlurCard(username, uid):
@@ -233,10 +225,9 @@ def playBlurCard(username, uid):
 		utils.logServer("Received socket message '{}' from {}: {}.".format(BLUR_CARD_PLAYED, username, uid))
 
 		game = getGameForPlayer(username)
+
 		with lock:
-			tuples = game.processBlurCardSelection(username, int(uid))
-		
-		emitTuples(tuples)
+			processGameSocketMessage(game, lambda: game.processBlurCardSelection(username, int(uid)))
 
 @socketio.on(EMPORIO_CARD_PICKED)
 def pickEmporioCard(username, uid):
@@ -244,10 +235,9 @@ def pickEmporioCard(username, uid):
 		utils.logServer("Received socket message '{}' from {}: {}.".format(EMPORIO_CARD_PICKED, username, uid))
 
 		game = getGameForPlayer(username)
-		with lock:
-			tuples = game.processEmporioCardSelection(username, int(uid))
 
-		emitTuples(tuples)
+		with lock:
+			processGameSocketMessage(game, lambda: game.processEmporioCardSelection(username, int(uid)))
 
 @socketio.on(KIT_CARLSON_CARD_PICKED)
 def pickKitCarlsonCard(username, uid):
@@ -255,21 +245,19 @@ def pickKitCarlsonCard(username, uid):
 		utils.logServer("Received socket message '{}' from {}: {}.".format(KIT_CARLSON_CARD_PICKED, username, uid))
 
 		game = getGameForPlayer(username)
-		with lock:
-			tuples = game.processKitCarlsonCardSelection(username, int(uid))
 
-		emitTuples(tuples)
+		with lock:
+			processGameSocketMessage(game, lambda: game.processKitCarlsonCardSelection(username, int(uid)))
 
 @socketio.on(PLAYER_CLICKED_ON)
-def jesseJonesClick(username, targetName, clickType):
+def playerClickedOn(username, targetName, clickType):
 	if validResponse(username, (PLAYER_CLICKED_ON, targetName, clickType)):
 		utils.logServer("Received socket message '{}' from {}: {}.".format(PLAYER_CLICKED_ON, username, (targetName, clickType)))
 
 		game = getGameForPlayer(username)
-		with lock:
-			tuples = game.processPlayerClickedOn(username, targetName, clickType)
 
-		emitTuples(tuples)
+		with lock:
+			processGameSocketMessage(game, lambda: game.processPlayerClickedOn(username, targetName, clickType))
 
 @socketio.on(ENDING_TURN)
 def endingTurn(username):
@@ -277,10 +265,9 @@ def endingTurn(username):
 		utils.logServer("Received socket message '{}' from {}.".format(ENDING_TURN, username))
 
 		game = getGameForPlayer(username)
-		with lock:
-			tuples = game.startNextTurn(username)
 		
-		emitTuples(tuples)
+		with lock:
+			processGameSocketMessage(game, lambda: game.startNextTurn(username))
 
 @socketio.on(CANCEL_CURRENT_ACTION)
 def cancelEndingTurn(username):
@@ -288,10 +275,9 @@ def cancelEndingTurn(username):
 		utils.logServer("Received socket message '{}' from {}.".format(CANCEL_CURRENT_ACTION, username))
 
 		game = getGameForPlayer(username)
+		
 		with lock:
-			tuples = game.cancelCurrentAction(username)
-
-		emitTuples(tuples)
+			processGameSocketMessage(game, lambda: game.cancelCurrentAction(username))
 
 @socketio.on(DISCARDING_CARD)
 def discardingCard(username, uid):
@@ -299,21 +285,19 @@ def discardingCard(username, uid):
 		utils.logServer("Received socket message '{}' from {}.".format(DISCARDING_CARD, username))
 
 		game = getGameForPlayer(username)
-		with lock:
-			tuples = game.playerDiscardingCard(username, int(uid))
 		
-		emitTuples(tuples)
+		with lock:
+			processGameSocketMessage(game, lambda: game.playerDiscardingCard(username, int(uid)))
 
 @socketio.on(USE_SPECIAL_ABILITY)
 def specialAbility(username):
 	if validResponse(username, USE_SPECIAL_ABILITY):
 		utils.logServer("Received socket message '{}' from {}.".format(USE_SPECIAL_ABILITY, username))
-		game = getGameForPlayer(username)
-
-		with lock:
-			tuples = game.useSpecialAbility(username)
 		
-		emitTuples(tuples)
+		game = getGameForPlayer(username)
+		
+		with lock:
+			processGameSocketMessage(game, lambda: game.useSpecialAbility(username))
 
 @socketio.on(REQUEST_PLAYER_LIST)
 def requestPlayerList(username):
@@ -412,16 +396,15 @@ def lobby():
 
 	# Player is joining a new lobby.
 	else:
-		lobbyNumber = str(random.randint(1111, 9999))
+		lobbyNumber = None
 		
 		# Generate new lobby numbers until an unused one is made.
-		while lobbyNumber in LOBBY_GAME_DICT:
-			lobbyNumber = str(random.randint(1111, 9999))
+		while lobbyNumber == None or lobbyNumber in LOBBY_GAME_DICT:
+			lobbyNumber = str(random.randint(1000, 9999))
 		
 		# Create a new game for this lobby.
 		LOBBY_GAME_DICT[lobbyNumber] = Gameplay()
 		LOBBY_GAME_DICT[lobbyNumber].lobbyNumber = lobbyNumber
-		utils.createSavePath(lobbyNumber)
 	
 	game = LOBBY_GAME_DICT[lobbyNumber]
 	USER_LOBBY_DICT[username] = lobbyNumber
@@ -479,4 +462,4 @@ if __name__ == '__main__':
 
 	app.jinja_env.filters['convertNameToPath'] = jinjafunctions.convertNameToPath
 
-	socketio.run(app, debug=True, host="0.0.0.0", port=os.environ.get('PORT'))
+	socketio.run(app, debug=False, host="0.0.0.0", port=os.environ.get('PORT'))

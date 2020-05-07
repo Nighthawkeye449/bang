@@ -8,16 +8,15 @@
     		
     		<div class="centered_text">
 		        <h2 class="centered_text player-list-usernames" style="display: inline-block; color: white; text-decoration: underline;">{{ p.username }}</h2>
-		        {% if p.role == 'Sheriff' %} <img class="centered_text" style='max-width: 12%; display: inline-block; margin-top: -5%;' src="{{ url_for('static', filename='/images/badge.png')}}"> {% endif %}
+		        {% if p.role == 'Sheriff' %} <img class="centered_text" style='max-width: 15%; display: inline-block; margin-top: -5%;' src="{{ url_for('static', filename='/images/badge.png')}}"> {% endif %}
 		    </div>
 
-	        {% if p.cardsInPlay|length > 0 %}
-	    		<span style="font-size: 17.5px; color: white; margin-top: -1vh; margin-bottom: 1vh;" class="centered centered_text">
-	    		{% if p.cardsInPlay|length == 2 %} {{ p.cardsInPlay[0].getDisplayName() + ',  ' + p.cardsInPlay[1].getDisplayName() }}
-	    		{% else %} {{ p.cardsInPlay[0].getDisplayName() }}
-	    		{% endif %}
-	    		</span>
+    		<span style="font-size: 17.5px; color: white; margin-top: -1vh; margin-bottom: 1vh;" class="centered centered_text">
+    		{% if p.cardsInPlay|length == 2 %} {{ p.cardsInPlay[0].getDisplayName() + ',  ' + p.cardsInPlay[1].getDisplayName() }}
+    		{% elif p.cardsInPlay|length == 1 %} {{ p.cardsInPlay[0].getDisplayName() }}
+    		{% else %} {{ "&nbsp;"|safe }}
     		{% endif %}
+    		</span>
 
 	        <img id="{{ p.username }}PlayerImage" src="{{ url_for('static', filename='/images/cards/' + ('characters/' if p.isAlive() else 'roles/') + (p.character.name|convertNameToPath if p.isAlive() else p.role.lower()) + '.jpg') }}" alt="{{ p.character.name }}" class="zoom_hover_1_5 centered player_column">
 	        <div class="centered player_column">

@@ -10,30 +10,45 @@ import json
 import jsonpickle
 import numbers
 import os
+import psycopg2
 import re
 
-def createSavePath(lobbyNumber):
-	path = getLocalFilePath(constants.JSON_GAME_PATH.format(lobbyNumber))
+def saveGameToJson(game):
+	return jsonpickle.encode(game)
 
-	if not os.path.exists(path):
-		try:
-			os.makedirs(os.path.dirname(path))
-			logServer("Created new game save path at {}".format(path))
-		except FileExistsError:
-			pass
+def loadGameFromJson(json):
+	return jsonpickle.decode(json)
+
+def getDatabaseConnection():
+	DATABASE_URL = os.environ['DATABASE_URL']
+	return psycopg2.connect(DATABASE_URL, sslmode='require')
 
 def saveGame(game):
-	path = getLocalFilePath(constants.JSON_GAME_PATH.format(game.lobbyNumber))
+	return
+	# conn = getDatabaseConnection()
+	# cur = conn.cursor()
 
-	with open(path, 'w+') as file:
-		file.write(jsonpickle.encode(game))
+	# sql = 'SET TIMEZONE='America/Los_angeles'; INSERT INTO saved_games (lobbyNumber, gameJson, timestamp) VALUES ({}, """{}""", NOW())'.format(game.lobbyNumber, jsonpickle.encode(game))
+	# cur.execute(sql)
+	# conn.commit()
+	# cur.close()
+	# conn.close()
 
 def loadGame(lobbyNumber):
-	with open(getLocalFilePath(constants.JSON_GAME_PATH.format(lobbyNumber)), 'r') as file:
-		loadedGame = jsonpickle.decode(file.read())
-		logServer("Loaded game for lobby {} from save file.".format(lobbyNumber))
-	
-	return loadedGame
+	return Gameplay()
+	# conn = getDatabaseConnection()
+	# cur = conn.cursor()
+
+	# sql = "SELECT gameJson FROM saved_games WHERE lobbyNumber = {} ORDER BY timestamp DESC LIMIT 1".format(lobbyNumber)
+	# cur.execute(sql)
+
+	# results = cur.fetchall()
+	# if len(results) == 0:
+	# 	logError("Unable to get saved game data for lobby number {}. Returning new game.".format(lobbyNumber))
+	# 	return Gameplay()
+
+	# gameJson = results[0]
+	# return jsonpickle.decode(gameJson)
 
 def log(msg, file):
 	if "html" not in msg:
@@ -171,8 +186,8 @@ def getCardsInPlayTemplate(player):
 def getPlayerInfoListTemplate(playerInfoList):
 	return Markup(render_template('player_info_list.html', playerInfoList=playerInfoList))
 
-def createClickOnPlayersTuple(player, clickType):
-	return (constants.CREATE_CLICK_ON_PLAYERS, {'clickType': clickType}, player)
+def createClickOnPlayersTuple(player, clickType, lastCardUid=0):
+	return (constants.CREATE_CLICK_ON_PLAYERS, {'clickType': clickType, 'lastCardUid': lastCardUid}, player)
 
 def createCardsDrawnTuple(player, description, cardsDrawn, startingTurn=True):
 	cardsDrawnImagesTemplate = Markup(render_template('/modals/card_images.html', cards=cardsDrawn))
@@ -300,17 +315,6 @@ def consolidateTuples(tuples):
 			logServer("Tuples after removing duplicates: {}".format(tuples))
 		tuples = nonDuplicated[::-1]
 
-		# If a player got multiple updates to his/her card carousel, just use the last (i.e. most updated) one.
-		carouselDict = dict()
-		originalLen = len(tuples)
-		for t in tuples:
-			if t[0] == constants.UPDATE_CARD_HAND:
-				carouselDict[t[2].username] = t # Overwrite any older version.
-
-		tuples = [t for t in tuples if t[0] != constants.UPDATE_CARD_HAND or t in carouselDict.values()]
-		if len(tuples) != originalLen:
-			logServer("Tuples after removing card hand updates: {}".format(tuples))
-
 		# If there are SLEEPs in the tuples, remove any extra SLEEPs that are for the automatic duration.
 		automaticSleepTups = [t for t in tuples if t[0] == constants.SLEEP and t[1] == constants.AUTOMATIC_SLEEP_DURATION]
 		if len(automaticSleepTups) > 0:
@@ -336,5 +340,3 @@ def consolidateTuples(tuples):
 		logServer("tuples after consolidating: {}".format(tuples))
 	
 	return tuples
-
-	

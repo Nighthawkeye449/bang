@@ -13,12 +13,14 @@ var CARDS_IN_PLAY_DIV = "#cardsInPlayDiv";
 var DISCARD_DIV = "#discardCardDiv";
 var WAITING_FOR_SPAN = "#waitingForSpan";
 var LOBBY_USERNAMES = "#lobby_usernames";
+var SOCKET_TIME_DIFFERENCE = 500; // Half a second.
 
 var cardsAreBlurred = false;
 var clickingOnPlayer = false;
 var keysPressed = {};
 var healthAnimationCounter = 0;
-var lastCardUid = 0;
+var lastCardUid = -1;
+var previousSocketTime = new Date().getTime();
 
 $(document).ready(function(){
 
@@ -35,7 +37,7 @@ $(document).ready(function(){
 
 	// Connect to the socket server.
 	if (username.length > 0) {
-		socket = io.connect('http://' + document.domain + ':' + location.port + '/', { forceNew: true });
+		socket = io.connect('http://' + document.domain + ':' + location.port + '/', { forceNew: true, transports: ['websocket'] });
 		socket.emit('connected', username);
 
 		setInterval(function() { socket.emit('connected', username); }, 5000);
@@ -54,7 +56,7 @@ $(document).ready(function(){
 				setTimeout(function() {
 					var html = data.html;
 					socket.emit('info_modal_undefined', username, html);
-				}, 100);
+				}, 500);
 			}
 			else {
 				showInfoModal(data.html);
@@ -79,7 +81,7 @@ $(document).ready(function(){
 					var html = data.html;
 					var question = data.question;
 					socket.emit('question_modal_undefined', username, option1, option2, option3, option4, option5, option6, option7, html, question);
-				}, 100);
+				}, 500);
 			}
 			else
 			{
@@ -255,9 +257,6 @@ $(document).ready(function(){
 			if ((/played a(n?) (Bang|Duello|Indians|Gatling)/.test(data.update) == false || (data.update.includes(" avoid"))) && !data.update.includes("won the game")) {
 				socket.emit('request_player_list', username);
 			}
-
-			// Reset the opacity on cards any time there's a new update.
-			setCardOpacity(false);
 		});
 
 		socket.on('blur_card_selection', function(data) {
@@ -284,7 +283,7 @@ $(document).ready(function(){
 		socket.on('update_player_list', function(data) {
 			$(BOTTOM_HALF).html("");
 			$(BOTTOM_HALF).html(data.html);
-			
+
 			// Shrink any usernames that don't fit above the player's card.
 			$(".player-list-usernames").each(function() {
 			    while ($(this).width() > $(this).parent().width() * 0.8) {
@@ -329,7 +328,7 @@ $(document).ready(function(){
 				$(this).attr("onClick", ""); 
 			});
 
-			// Replace the player's username and the question mark with a button for returning to the lobby.
+			// Replace the question mark with a button for returning to the lobby.
 			$("#questionmark").hide();
 			$("#return-to-lobby-button").css("display", "block");
 		});
@@ -337,12 +336,16 @@ $(document).ready(function(){
 		socket.on('create_click_on_players', function(data) {
 			clickingOnPlayer = true;
 
-			$(".playerInfoColumn").each(function(index, elem) {
-				var playerUsername = $(this).attr("id").substring("player_div_".length);
-				if (playerUsername != username) {
-					$(this).attr("onClick", "playerClickedOn('" + playerUsername + "', '" + data.clickType + "')");
-				}
-			});
+			// Handle the player reloading the page.
+			if (lastCardUid == 0 && data.lastCardUid != 0) {
+				lastCardUid = data.lastCardUid;
+				setTimeout(function() {
+					setPlayerClicks(data.clickType);
+				}, 500);
+			}
+			else {
+				setPlayerClicks(data.clickType);
+			}
 
 			if (data.clickType == "targeted_card_player_click") {
 				setCardOpacity(true, lastCardUid);
@@ -450,18 +453,27 @@ function showInfoModal(html) {
 
 function playCard(uid) {
 	if (!cardsAreBlurred && !clickingOnPlayer) {
-		socket.emit('validate_card_choice', username, uid);
-		lastCardUid = uid;
+		if (new Date().getTime() - previousSocketTime >= SOCKET_TIME_DIFFERENCE) {
+			socket.emit('validate_card_choice', username, uid);
+			lastCardUid = uid;
+			updatePreviousSocketTime();
+		}
 	}
 }
 
 function playBlurCard(uid) {
-	socket.emit('blur_card_played', username, uid);
-	cardsAreBlurred = false;
+	if (new Date().getTime() - previousSocketTime >= SOCKET_TIME_DIFFERENCE) {
+		socket.emit('blur_card_played', username, uid);
+		cardsAreBlurred = false;
+		updatePreviousSocketTime();
+	}
 }
 
 function discardCard(uid) {
-	socket.emit('discarding_card', username, uid);
+	if (new Date().getTime() - previousSocketTime >= SOCKET_TIME_DIFFERENCE) {
+		socket.emit('discarding_card', username, uid);
+		updatePreviousSocketTime();
+	}
 }
 
 function addBlurToCards(cardNames) {
@@ -522,8 +534,16 @@ function addDiscardClickFunctions() {
 	});
 }
 
+function setPlayerClicks(clickType='') {
+	$(".playerInfoColumn").each(function(index, elem) {
+		var opponentUsername = $(this).attr("id").substring("player_div_".length);
+		if (opponentUsername != username) {
+			$(this).attr("onClick", clickType == '' ? '' : "playerClickedOn('" + opponentUsername + "', '" + clickType + "')");
+		}
+	});
+}
+
 function setCardOpacity(add, uid=-1) {
-	console.log("setting opacity", add, uid);
 	var cardId = '#hand_card_' + uid.toString();
 	var zindexDifference = 100;
 
@@ -651,8 +671,15 @@ function rejoinGame() {
 }
 
 function playerClickedOn(targetName, clickType) {
-	socket.emit('player_clicked_on', username, targetName, clickType);
-	clickingOnPlayer = false;
+	if (new Date().getTime() - previousSocketTime >= (SOCKET_TIME_DIFFERENCE / 2)) {
+		socket.emit('player_clicked_on', username, targetName, clickType);
+		clickingOnPlayer = false;
+		updatePreviousSocketTime();
+	}
+}
+
+function updatePreviousSocketTime() {
+	previousSocketTime = new Date().getTime();
 }
 
 /* Key press functions to enable players to send messages to the server using keyboard strokes. */
@@ -672,8 +699,10 @@ $(document).keydown(function (e) {
 
 			    else if (e.which == 67) { // Shift-C, to cancel the current action.
 			    	socket.emit('cancel_current_action', username);
+			    	lastCardUid = 0;
 		    		setCardOpacity(false);
 		    		clickingOnPlayer = false;
+		    		setPlayerClicks();
 			    }
 
 			    else if (e.which == 83) { // Shift-S, to trigger a special ability when applicable.
