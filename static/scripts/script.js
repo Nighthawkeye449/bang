@@ -148,14 +148,14 @@ $(document).ready(function(){
 				lobby_players_list_string = lobby_players_list_string + listTag + players[i].toString() + '</li>';
 			}
 			$(LOBBY_USERNAMES).html(lobby_players_list_string);
+		});
 
-			// Once enough players are in the game, show the start button.
-			if (players.length >= 4 && players.length <= 7 && username == players[0]) {
-				$("#start_button").css("display", "block");
-			}
-			else {
-				$("#start_button").css("display", "none");	
-			}
+		socket.on('show_start_button', function(data) {
+			$("#start_button").css("display", "block");
+		});
+
+		socket.on('hide_start_button', function(data) {
+			$("#start_button").css("display", "none");
 		});
 
 		socket.on('reload_lobby', function(data) {

@@ -3,7 +3,9 @@ from static.library.playergame import PlayerGame
 from static.library import utils
 from flask import Markup, render_template
 
+import copy
 import random
+import threading
 
 class Gameplay(dict):
 	def __init__(self):
@@ -110,11 +112,11 @@ class Gameplay(dict):
 	def getCharacterByName(self, c):
 		return utils.getUniqueItem(lambda character: character.name == c, self.characters)
 
-	def getStartGameTuples(self):
+	def getStartGameTuples(self, reloadingGame=False):
 		utils.logGameplay("Initial player order will be: {}. STARTING GAME.".format([u.username for u in self.playerOrder]))
 
 		return [(RELOAD_PLAY_PAGE, {'html': self.renderPlayPageForPlayer(p.username), 'cardInfo': p.getCardInfo(p == self.playerOrder[0])}, p) for p in self.playerOrder] \
-				 + [(SLEEP, 1, None)] + [t for t in self.startNextTurn(self.getCurrentPlayerName()) if t[0] != SLEEP]
+				 + [(SLEEP, 1, None)] + [t for t in self.startNextTurn(self.getCurrentPlayerName(), reloadingGame=reloadingGame) if t[0] != SLEEP]
 
 	def getPlayerReloadingTuples(self, username, gameOver=False):
 		player = self.players[username]
@@ -163,20 +165,22 @@ class Gameplay(dict):
 		self.bangedThisTurn = False
 		self.drawingToStartTurn = True
 
-	def startNextTurn(self, username):
-		if username == None or username not in self.players:
-			utils.logError("Unrecognized username {} passed in for starting next turn.".format(username, self.players.keys()))
-			return []
-		elif username != self.getCurrentPlayerName():
-			utils.logError("{} shouldn't be able to end the current turn (the current player is {}).".format(username, self.getCurrentPlayerName()))
-			return []
-		elif self.currentCard != None or not self.currentCardCanBeReset():
-			utils.logGameplay("{} tried to end their turn but the current card ({}) is still being processed.".format(username, self.currentCard))
-			return [self.createInfoTuple("You can't end your turn while the {} is still being played!".format(self.currentCard.getDisplayName()), self.players[username])]
-		elif self.specialAbilityCards[SID_KETCHUM] != None:
-			utils.logGameplay("{} tried to end their turn but Sid Ketchum needs to finish discarding cards for his special ability first.".format(username))
-			sidKetchumText = "Sid Ketchum needs" if self.players[username].character.name != SID_KETCHUM else "You need"
-			return [self.createInfoTuple("Hold on. {} to finish discarding cards for his ability first.".format(), self.players[username])]
+	def startNextTurn(self, username, reloadingGame=False):
+		if not reloadingGame:
+			if username == None or username not in self.players:
+				utils.logError("Unrecognized username {} passed in for starting next turn.".format(username, self.players.keys()))
+				return []
+			elif username != self.getCurrentPlayerName():
+				utils.logError("{} shouldn't be able to end the current turn (the current player is {}).".format(username, self.getCurrentPlayerName()))
+				return []
+			elif self.currentCard != None or not self.currentCardCanBeReset():
+				utils.logGameplay("{} tried to end their turn but something (current card? {}) is still being processed.".format(username, self.currentCard))
+				infoText = "You can't end your turn " + ("right now." if self.currentCard == None else "while the {} is still being played!".format(self.currentCard.getDisplayName()))
+				return [self.createInfoTuple(infoText, self.players[username])]
+			elif self.specialAbilityCards[SID_KETCHUM] != None:
+				utils.logGameplay("{} tried to end their turn but Sid Ketchum needs to finish discarding cards for his special ability first.".format(username))
+				sidKetchumText = "Sid Ketchum needs" if self.players[username].character.name != SID_KETCHUM else "You need"
+				return [self.createInfoTuple("Hold on. {} to finish discarding cards for his ability first.".format(), self.players[username])]
 
 		emitTuples = []
 
@@ -198,7 +202,20 @@ class Gameplay(dict):
 
 			self.discardingCards = True
 
-		else: # The player doesn't need to discard or is done, so move on to the next player.
+		# The player doesn't need to discard or is done now, so move on to the next player.
+		else:
+			# If the game isn't being reloaded, save the game state here.
+			if not reloadingGame:
+				utils.logGameplay("Saving the game state.")
+				gameCopy = copy.deepcopy(self)
+				threading.Thread(target=utils.saveGame, args=(gameCopy,)).start()
+
+			# Otherwise, this game state is no different from what's saved, so don't bother.
+			# Instead, reload all the updates for every player's screen.
+			else:
+				for updateString in self.updatesList:
+					emitTuples.extend(utils.createUpdateTuples(updateString, self.players.values()))
+
 			self.discardingCards = False
 
 			if self.currentTurn > 0 and self.playerOrder[0].jailStatus == 0:
@@ -209,6 +226,7 @@ class Gameplay(dict):
 			# Rotate to the next alive player and set up for the new turn.
 			self.advanceTurn()
 			utils.logGameplay("Starting the next turn. The new current player is {}.".format(self.getCurrentPlayerName()))
+
 			player = self.playerOrder[0]
 			emitTuples.extend(self.createUpdates("{} started their turn.".format(player.username)))
 
@@ -936,6 +954,7 @@ class Gameplay(dict):
 					or utils.getReverseFormat(QUESTION_BARILE_MANCATO, question) != None:
 				if answer == LOSE_A_LIFE:
 					emitTuples = self.processPlayerTakingDamage(player)
+				
 				elif answer in [PLAY_A_MANCATO, PLAY_TWO_MANCATOS, PLAY_A_BANG]:
 					requiredCardName = MANCATO if MANCATO in answer.lower() else BANG
 					requiredCardsInHand = player.getCardTypeFromHand(requiredCardName)
@@ -1077,8 +1096,12 @@ class Gameplay(dict):
 
 			elif answer == PLAY_A_BANG:
 				bangsInHand = player.getCardTypeFromHand(BANG)
-				if len(bangsInHand) == 1: # If the player only has 1 Bang, automatically play it.
+
+				# If the player isn't Calamity Janet, or if Calamity only has 1 effective Bang, just automatically play the card(s) for him/her.
+				if player.character.name != CALAMITY_JANET or len(set([c.name for c in bangsInHand])) == 1:
 					emitTuples.extend(self.processDuelloResponse(player, card=bangsInHand[0]))
+				
+				# Otherwise, blur the non-Bangs/Mancatos for Calamity and have him/her choose which one to use.
 				else:
 					self.playersWaitingFor.append(player.username)
 					emitTuples = utils.createCardBlurTuples(player, BANG)
@@ -1327,10 +1350,8 @@ class Gameplay(dict):
 		if not canBeReset:
 			utils.logGameplay("Card {} can't be reset yet. {} {}".format(self.currentCard.uid if self.currentCard != None else None, self.unansweredQuestions, self.playersWaitingFor))
 
-		# If the card can be reset here, i.e. the card is done being played, save the current game state.
 		if canBeReset:
 			utils.logGameplay("Card {} CAN be reset.".format(self.currentCard))
-			utils.saveGame(self)
 
 		return canBeReset
 
@@ -1810,9 +1831,12 @@ class Gameplay(dict):
 			opponents = [target]
 
 		# For Gatling or Indians, order the opponents so that players who will get a question modal get it before any automatic delays occur.
+		# Randomize the order of the automatic opponents to also help make it seem like they responded.
 		else:
 			opponents = [p for p in self.getAliveOpponents(player.username) if len(p.getCardTypeFromHand(requiredCard)) >= numRequiredCards or p.countBariles() > 0]
-			opponents += [p for p in self.getAliveOpponents(player.username) if p not in opponents]
+			automaticOpponents = [p for p in self.getAliveOpponents(player.username) if p not in opponents]
+			random.shuffle(automaticOpponents)
+			opponents += automaticOpponents
 
 		if cardName == BANG:
 			self.bangedThisTurn = True
@@ -2011,13 +2035,13 @@ class Gameplay(dict):
 			utils.logError("{} did an on-player click ({} against {}), but the current player is {}.".format(player.getLogString(), clickType, targetName, self.playerOrder[0].getLogString()))
 			return []
 
-		del self.clickingOnPlayerDict[player.username]
-
 		if clickType == JESSE_JONES_CLICK:
+			del self.clickingOnPlayerDict[player.username]
 			return self.processJesseJonesDrawingFromPlayer(username, targetName)
 		else:
 			response = self.validateTargetChoice(player, target)
 			if response == OK_MSG:
+				del self.clickingOnPlayerDict[player.username]
 				return self.playCurrentCard(player, targetName=target.username)
 			else:
 				return [self.createInfoTuple(response, player, header="Invalid Target")] # Don't re-open the question modal so that the player can play another card if s/he wants to.

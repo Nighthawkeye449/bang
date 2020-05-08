@@ -104,11 +104,11 @@ socketio = SocketIO(app, async_handlers=False, always_connect=True, ping_timeout
 
 lock = Lock()
 
-USER_LOBBY_DICT = {}
-LOBBY_GAME_DICT = {}
+USER_LOBBY_DICT = dict()
+LOBBY_GAME_DICT = dict()
+LOBBIES_WAITING = set()
 SOCKET_MESSAGE_TIMESTAMPS = dict()
 SOCKET_MESSAGE_HISTORY = dict()
-
 CONNECTED_USERS = dict()
 
 #################### Socket IO functions ####################
@@ -130,18 +130,26 @@ def leaveLobby(username):
 	sid = game.players[username].sid
 	lobby = USER_LOBBY_DICT[username]
 	
-	game.removePlayer(username)
-	del USER_LOBBY_DICT[username]
+	if not game.started:
+		game.removePlayer(username)
+		del USER_LOBBY_DICT[username]
 
 	# Delete this lobby entirely if all the players have left.
 	if len([u for u in USER_LOBBY_DICT if USER_LOBBY_DICT[u] == lobby]) == 0:
 		del LOBBY_GAME_DICT[lobby]
 
-	sorted_usernames = sorted(game.players.keys())
+	else:
+		sorted_usernames = sorted(game.players.keys())
 
-	# Broadcast the updated list of players to everybody else in this lobby.
-	tuples = [(LOBBY_PLAYER_UPDATE, {'usernames': sorted_usernames}, p) for p in game.players.values()]
-	emitTuples(tuples)
+		# Broadcast the updated list of players to everybody else in this lobby.
+		tuples = [(LOBBY_PLAYER_UPDATE, {'usernames': sorted_usernames}, p) for p in game.players.values()]
+
+		if len(game.players) < 4 or (game.started and not all([name in USER_LOBBY_DICT for name in game.players])):
+			tuples.append((HIDE_START_BUTTON, dict(), game.playerOrder[0]))
+		else:
+			tuples.append((SHOW_START_BUTTON, dict(), game.playerOrder[0]))
+
+		emitTuples(tuples)
 
 	# Reload the pick lobby page for the player who left.
 	socketio.emit(RELOAD_LOBBY, {'html': render_template("pick_lobby.html", username=username)}, room=sid)
@@ -154,8 +162,16 @@ def startGame(username):
 	utils.logServer("Received socket message '{}' from {}. Preparing game for setup in lobby {}.".format(START_BUTTON_CLICKED, username, lobby))
 
 	game = LOBBY_GAME_DICT[lobby]
+	if game.lobbyNumber in LOBBIES_WAITING:
+		LOBBIES_WAITING.remove(game.lobbyNumber)
+
+	# The game is starting for the first time, so players need to choose characters.
 	if not game.started:
 		tuples = game.prepareForSetup()
+
+	# The game is being reloaded, so go straight to the play page.
+	else:
+		tuples = game.getStartGameTuples(reloadingGame=True)
 
 	if tuples:
 		emitTuples(tuples)
@@ -311,26 +327,29 @@ def requestPlayerList(username):
 @socketio.on(DISCONNECT)
 def playerDisconnect():
 	sid = request.sid
-
 	if sid in CONNECTED_USERS.values():
 		username = [u for u in CONNECTED_USERS if CONNECTED_USERS[u] == sid][0]
 		utils.logServer("Received socket message '{}' from SID {} ({}).".format(DISCONNECT, sid, username))
 		
-		utils.logServer("Disconnecting {}.".format(username))
 		del CONNECTED_USERS[username]
 
-		# If this is the last player disconnecting from his/her lobby, just delete the lobby entirely.
+		# If this is the last player disconnecting from his/her lobby and the game is over, just delete the lobby entirely.
 		if username in USER_LOBBY_DICT and USER_LOBBY_DICT[username] in LOBBY_GAME_DICT:
 			game = getGameForPlayer(username)
-			if game.started and len([u for u in game.players if u in CONNECTED_USERS]) == 0:
+			if game.started and game.lobbyNumber not in LOBBIES_WAITING and len([u for u in game.players if u in CONNECTED_USERS]) == 0:
 				lobby = USER_LOBBY_DICT[username]
 				utils.logServer("Last user in lobby {} was disconnected. Removing the game.".format(lobby))
 
-				del LOBBY_GAME_DICT[lobby]
-				
 				for u in game.players:
 					if u in USER_LOBBY_DICT:
 						del USER_LOBBY_DICT[u]
+
+				# Delete the game from the database if the game is over.
+				if game.gameOver:
+					del LOBBY_GAME_DICT[lobby]
+					utils.deleteGame(lobby)
+				else:
+					LOBBY_GAME_DICT[lobby] = utils.loadGame(lobby) # Reset the game to the save state.
 
 	else:
 		utils.logServer("SID {} didn't match any current users.".format(sid))
@@ -366,7 +385,7 @@ def homePage():
 		if validResult != '':
 			return render_template('home.html', warning_msg=validResult)
 		else:
-			if username in USER_LOBBY_DICT and USER_LOBBY_DICT[username] in LOBBY_GAME_DICT:
+			if username in USER_LOBBY_DICT and USER_LOBBY_DICT[username] in LOBBY_GAME_DICT and USER_LOBBY_DICT[username] not in LOBBIES_WAITING:
 				return render_template("rejoin_game.html", username=username)
 
 			else:
@@ -382,12 +401,17 @@ def lobby():
 	# Player is joining an existing lobby.
 	if not utils.isEmptyOrNull(request.form['lobby_number']):
 		lobbyNumber = request.form['lobby_number']
+
+		if not lobbyNumber.isdigit():
+			return render_template('pick_lobby.html', username=username, warning_msg="Sorry, that's in invalid lobby number.")
+		else:
+			lobbyNumber = int(lobbyNumber)
 		
-		if request.form['lobby_number'] not in LOBBY_GAME_DICT:
+		if lobbyNumber not in LOBBY_GAME_DICT:
 			return render_template('pick_lobby.html', username=username, warning_msg="Sorry, that lobby couldn't be found.")
 
 		# Don't allow players to join a lobby for a game that's already started.
-		elif LOBBY_GAME_DICT[lobbyNumber].started:
+		elif LOBBY_GAME_DICT[lobbyNumber].started and username not in LOBBY_GAME_DICT[lobbyNumber].players:
 			return render_template('pick_lobby.html', username=username, warning_msg="Sorry, that game has already started.")
 
 		# Don't allow players to join a lobby if it's already full.
@@ -400,7 +424,7 @@ def lobby():
 		
 		# Generate new lobby numbers until an unused one is made.
 		while lobbyNumber == None or lobbyNumber in LOBBY_GAME_DICT:
-			lobbyNumber = str(random.randint(1000, 9999))
+			lobbyNumber = random.randint(1000, 9999)
 		
 		# Create a new game for this lobby.
 		LOBBY_GAME_DICT[lobbyNumber] = Gameplay()
@@ -408,12 +432,21 @@ def lobby():
 	
 	game = LOBBY_GAME_DICT[lobbyNumber]
 	USER_LOBBY_DICT[username] = lobbyNumber
+	LOBBIES_WAITING.add(lobbyNumber)
 
-	game.addPlayer(username, CONNECTED_USERS[username] if username in CONNECTED_USERS else 0)
-	username_order = [p.username for p in game.playerOrder]
-	
+	if username not in game.players:
+		game.addPlayer(username, CONNECTED_USERS[username] if username in CONNECTED_USERS else 0)
+		username_order = [p.username for p in game.playerOrder]
+		tuples = [(LOBBY_PLAYER_UPDATE, {'usernames': username_order}, p) for p in game.players.values()]
+	else:
+		game.players[username].sid = CONNECTED_USERS[username]
+		username_order = [p.username for p in game.playerOrder if p.username in USER_LOBBY_DICT]
+		tuples = [(LOBBY_PLAYER_UPDATE, {'usernames': username_order}, p) for p in game.players.values() if p.username in USER_LOBBY_DICT]
+
+	if (not game.started and 4 <= len(game.players) <= 7) or (game.started and all([name in USER_LOBBY_DICT for name in game.players])):
+		tuples.append((SHOW_START_BUTTON, dict(), game.playerOrder[0]))
+
 	# Broadcast the updated list of players to everybody in this lobby.
-	tuples = [(LOBBY_PLAYER_UPDATE, {'usernames': username_order}, p) for p in game.players.values()]
 	emitTuples(tuples)
 
 	# Render the lobby page with all usernames for the new player.
@@ -461,5 +494,9 @@ if __name__ == '__main__':
 	signal(SIGINT, handler)
 
 	app.jinja_env.filters['convertNameToPath'] = jinjafunctions.convertNameToPath
+
+	LOBBY_GAME_DICT = utils.loadGames()
+	LOBBIES_WAITING |= set(LOBBY_GAME_DICT.keys())
+	utils.logServer("Successfully loaded {} games from the database.".format(len(LOBBY_GAME_DICT)))
 
 	socketio.run(app, debug=False, host="0.0.0.0", port=os.environ.get('PORT'))

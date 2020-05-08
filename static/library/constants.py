@@ -89,6 +89,8 @@ NEVER_MIND = "Never mind"
 
 # Constants for outgoing socket message names.
 LOBBY_PLAYER_UPDATE = "lobby_player_update"
+SHOW_START_BUTTON = "show_start_button"
+HIDE_START_BUTTON = "hide_start_button"
 RELOAD_LOBBY = "reload_lobby"
 START_GAME = "start_game"
 SHOW_INFO_MODAL = "show_info_modal"

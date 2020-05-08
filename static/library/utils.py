@@ -1,7 +1,6 @@
 from static.library import constants
 from static.library.card import Card, GunCard
 from static.library.character import Character
-from static.library.gameplay import Gameplay
 from flask import Markup, render_template
 from pathlib import Path
 import datetime
@@ -11,6 +10,7 @@ import jsonpickle
 import numbers
 import os
 import psycopg2
+import random
 import re
 
 def saveGameToJson(game):
@@ -20,35 +20,76 @@ def loadGameFromJson(json):
 	return jsonpickle.decode(json)
 
 def getDatabaseConnection():
-	DATABASE_URL = os.environ['DATABASE_URL']
-	return psycopg2.connect(DATABASE_URL, sslmode='require')
+	try:
+		database_url = os.environ['DATABASE_URL']
+	except KeyError:
+		database_url = "postgres://nnotnxproibrzj:e68985ec9425d74ea8537f086331b59e036a0a9ac557fe3c30da6de71baf4e48@ec2-54-165-36-134.compute-1.amazonaws.com:5432/d9smgukkf0nq7q"
+
+	return psycopg2.connect(database_url, sslmode='require')
 
 def saveGame(game):
-	return
-	# conn = getDatabaseConnection()
-	# cur = conn.cursor()
+	conn = getDatabaseConnection()
+	cur = conn.cursor()
 
-	# sql = 'SET TIMEZONE='America/Los_angeles'; INSERT INTO saved_games (lobbyNumber, gameJson, timestamp) VALUES ({}, """{}""", NOW())'.format(game.lobbyNumber, jsonpickle.encode(game))
-	# cur.execute(sql)
-	# conn.commit()
-	# cur.close()
-	# conn.close()
+	gameJson = saveGameToJson(game)
+
+	sql = "INSERT INTO saved_games (lobbyNumber, gameJson, timestamp) VALUES (%s, %s, %s)"
+	cur.execute(sql, (game.lobbyNumber, gameJson, datetime.datetime.now()))
+	conn.commit()
+	cur.close()
+	conn.close()
+
+	logServer("Saved game state for lobby {} to database.".format(game.lobbyNumber))
 
 def loadGame(lobbyNumber):
-	return Gameplay()
-	# conn = getDatabaseConnection()
-	# cur = conn.cursor()
+	conn = getDatabaseConnection()
+	cur = conn.cursor()
 
-	# sql = "SELECT gameJson FROM saved_games WHERE lobbyNumber = {} ORDER BY timestamp DESC LIMIT 1".format(lobbyNumber)
-	# cur.execute(sql)
+	sql = "SELECT gameJson FROM saved_games WHERE lobbyNumber = {} ORDER BY timestamp DESC LIMIT 1".format(lobbyNumber)
+	cur.execute(sql)
 
-	# results = cur.fetchall()
-	# if len(results) == 0:
-	# 	logError("Unable to get saved game data for lobby number {}. Returning new game.".format(lobbyNumber))
-	# 	return Gameplay()
+	results = cur.fetchall()
+	cur.close()
+	conn.close()
 
-	# gameJson = results[0]
-	# return jsonpickle.decode(gameJson)
+	if len(results) == 0:
+		logError("Unable to get saved game data for lobby number {}. Returning null.".format(lobbyNumber))
+		return None
+
+	return loadGameFromJson(results[0][0])
+
+def loadGames():
+	conn = getDatabaseConnection()
+	cur = conn.cursor()
+
+	sql = "SELECT lobbyNumber, gameJson FROM saved_games WHERE lobbyNumber >= 1000 ORDER BY timestamp DESC"
+	cur.execute(sql)
+
+	results = cur.fetchall()
+	cur.close()
+	conn.close()
+
+	lobbyDict = dict()
+	for result in results:
+		lobbyNumber, gameJson = result
+		if lobbyNumber not in lobbyDict:
+			lobbyDict[lobbyNumber] = loadGameFromJson(gameJson)
+
+	return lobbyDict
+
+def deleteGame(lobbyNumber):
+	conn = getDatabaseConnection()
+	cur = conn.cursor()
+
+	gameJson = saveGameToJson(game)
+
+	sql = "DELETE * FROM saved_games WHERE lobbyNumber = {}".format(lobbyNumber)
+	cur.execute(sql)
+	conn.commit()
+	cur.close()
+	conn.close()
+
+	logServer("Saved game state for lobby {} to database.".format(game.lobbyNumber))
 
 def log(msg, file):
 	if "html" not in msg:
@@ -318,7 +359,19 @@ def consolidateTuples(tuples):
 		# If there are SLEEPs in the tuples, remove any extra SLEEPs that are for the automatic duration.
 		automaticSleepTups = [t for t in tuples if t[0] == constants.SLEEP and t[1] == constants.AUTOMATIC_SLEEP_DURATION]
 		if len(automaticSleepTups) > 0:
-			tuples = [t for t in tuples if t[0] != constants.SLEEP or t == automaticSleepTups[0] or t[1] < constants.AUTOMATIC_SLEEP_DURATION]
+			temp = []
+			addedAutomaticSleep = False
+			for t in tuples:
+				if t in automaticSleepTups:
+					if not addedAutomaticSleep:
+						addedAutomaticSleep = True
+						temp.append(t)
+					else:
+						temp.append((constants.SLEEP, random.randint(10, 20) / 10, None)) # Add a random delay between 1 and 2 seconds so that all the messages don't appear at once.
+				else:
+					temp.append(t)
+
+			tuples = list(temp)
 			logServer("Consolidated SLEEPS in the tuples: {}".format(tuples))
 
 		# Remove any tuples that come after the game over tuples.
