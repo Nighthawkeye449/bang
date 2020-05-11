@@ -59,6 +59,7 @@ def processGameSocketMessage(game, f):
 	try:
 		tuples = f()
 		emitTuples(tuples)
+
 	except Exception as e:
 		LOBBY_GAME_DICT[game.lobbyNumber] = utils.loadGameFromJson(gameJson) # Revert the game state so that it's not potentially stuck in limbo.
 		utils.logError(traceback.format_exc())
@@ -100,7 +101,7 @@ def getGameForPlayer(username):
 Payload.max_decode_packets = 200
 app = Flask(__name__, static_url_path='/static', template_folder='templates')
 app.secret_key = 'secretkey1568486123168'
-socketio = SocketIO(app, async_handlers=False, always_connect=True, ping_timeout=45, ping_interval=15)
+socketio = SocketIO(app, async_mode="eventlet", async_handlers=False, cors_allowed_origins="*", always_connect=True, ping_timeout=45, ping_interval=15)
 
 lock = Lock()
 
@@ -123,6 +124,8 @@ def userConnected(username):
 	if username in USER_LOBBY_DICT:
 		game = getGameForPlayer(username)
 		game.players[username].sid = request.sid
+
+	socketio.emit(KEEP_ALIVE, dict(), room=request.sid)
 
 @socketio.on(LEAVE_LOBBY)
 def leaveLobby(username):
@@ -298,7 +301,7 @@ def cancelEndingTurn(username):
 @socketio.on(DISCARDING_CARD)
 def discardingCard(username, uid):
 	if validResponse(username, (DISCARDING_CARD, uid)):
-		utils.logServer("Received socket message '{}' from {}.".format(DISCARDING_CARD, username))
+		utils.logServer("Received socket message '{}' from {} for {}.".format(DISCARDING_CARD, username, uid))
 
 		game = getGameForPlayer(username)
 		
@@ -329,7 +332,7 @@ def playerDisconnect():
 	sid = request.sid
 	if sid in CONNECTED_USERS.values():
 		username = [u for u in CONNECTED_USERS if CONNECTED_USERS[u] == sid][0]
-		utils.logServer("Received socket message '{}' from SID {} ({}).".format(DISCONNECT, sid, username))
+		utils.logServer("Received socket message '{}' from {} (SID {}).".format(DISCONNECT, username, sid))
 		
 		del CONNECTED_USERS[username]
 

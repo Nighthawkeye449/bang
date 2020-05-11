@@ -1,5 +1,5 @@
 from static.library import utils
-from static.library.constants import QUESTION_CARD_FORMAT
+from static.library.constants import QUESTION_CARD_FORMAT, DYNAMITE
 import json
 
 '''
@@ -59,7 +59,10 @@ class Card(dict):
 		return utils.convertRawNameToDisplay(self.name)
 
 	def getDeterminerString(self):
-		return utils.getDeterminerString(self.name)
+		if self.name == DYNAMITE:
+			return "the Dynamite"
+		else:
+			return utils.getDeterminerString(self.name)
 
 	def getQuestionString(self):
 		return QUESTION_CARD_FORMAT.format(self.getDisplayName(), self.value, self.suit)

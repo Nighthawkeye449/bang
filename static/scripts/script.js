@@ -13,7 +13,9 @@ var CARDS_IN_PLAY_DIV = "#cardsInPlayDiv";
 var DISCARD_DIV = "#discardCardDiv";
 var WAITING_FOR_SPAN = "#waitingForSpan";
 var LOBBY_USERNAMES = "#lobby_usernames";
+var PLAYER_COLUMN_IMAGE = ".player-column-image";
 var SOCKET_TIME_DIFFERENCE = 500; // Half a second.
+var KEYCODES_LIST = [13, 16, 67, 69, 83]; // Enter, Shift, C, E, S
 
 var cardsAreBlurred = false;
 var clickingOnPlayer = false;
@@ -24,10 +26,6 @@ var previousSocketTime = new Date().getTime();
 
 $(document).ready(function(){
 
-	if (!(navigator.userAgent.search("Chrome") >= 0)) {
-		alert("Using Chrome is strongly encouraged for this game. Other browsers may experience rendering issues.");
-	}
-
 	if (location.protocol !== 'http:') {
 	    location.replace(`http:${location.href.substring(location.protocol.length)}`);
 	}
@@ -37,17 +35,19 @@ $(document).ready(function(){
 
 	// Connect to the socket server.
 	if (username.length > 0) {
-		socket = io.connect('http://' + document.domain + ':' + location.port + '/', { forceNew: true, transports: ['websocket'] });
+		socket = io.connect('http://' + document.domain + ':' + location.port + '/', { forceNew: true, transports: ['polling'] });
 		socket.emit('connected', username);
 
-		setInterval(function() { socket.emit('connected', username); }, 5000);
+		setInterval(function() { socket.emit('connected', username); }, 10000);
 
-		socket.on('disconnect', function () {
+		socket.on('disconnect', function() {
 			socket.emit('connected', username);
 			setTimeout(function() {
 				socket.emit('rejoin_game', username);
 			}, 250);
 		});
+
+		socket.on('keep_alive', function() {})
 
 		/* Socket functions for showing the modals. */
 
@@ -225,6 +225,12 @@ $(document).ready(function(){
 				}
 			}
 
+			// If the update is about a player taking damage, remove the opacity on his/her image.
+			if (data.update.split(' ').length > 3 && (data.update.split(' ')[1] + ' ' + data.update.split(' ')[2]) == "was hit") {
+				var playerHitUsername = data.update.split(' ')[0];
+				$("#" + playerHitUsername + "PlayerImage").css("opacity", 1);
+			}
+
 			// Make player usernames red.
 			var redSpan = "<span style='color: red;'>";
 
@@ -351,6 +357,10 @@ $(document).ready(function(){
 				setCardOpacity(true, lastCardUid);
 			}
 		});
+
+		socket.on('set_player_opacity', function(data) {
+			setPlayerOpacity(data.currentUsername);
+		});
 	}
 });
 
@@ -452,9 +462,11 @@ function showInfoModal(html) {
 }
 
 function playCard(uid) {
+	console.log("playCard", uid, cardsAreBlurred, clickingOnPlayer);
 	if (!cardsAreBlurred && !clickingOnPlayer) {
 		if (new Date().getTime() - previousSocketTime >= SOCKET_TIME_DIFFERENCE) {
 			socket.emit('validate_card_choice', username, uid);
+			console.log("playCard emitted");
 			lastCardUid = uid;
 			updatePreviousSocketTime();
 		}
@@ -500,6 +512,14 @@ function removeBlurFromCards() {
 	});
 	
 	cardsAreBlurred = false;
+}
+
+function resetCardZIndeces() {
+	var counter = 0;
+	$(CARDS_IN_HAND_DIV).find("img").each(function() {
+		$(this).css("z-index", 10 + counter);
+		counter++;
+	});
 }
 
 function pickEmporioCard(uid) {
@@ -553,7 +573,7 @@ function setCardOpacity(add, uid=-1) {
 		$(cardId).css("zIndex", (parseInt($(cardId).css("zIndex")) + zindexDifference).toString());
 
 		$(CARDS_IN_HAND_DIV + " img").each(function() {
-			if ($(this).attr("id") != cardId.substring(1)) {
+			if ($(this).attr("id") != cardId.substring(1) || $(CARDS_IN_HAND_DIV + " img").length == 1) {
 				$(this).css("opacity", 0.25);
 			}
 		});
@@ -568,6 +588,15 @@ function setCardOpacity(add, uid=-1) {
 			$(this).css("opacity", 1);
 		});
 	}
+}
+
+function setPlayerOpacity(currentUsername, targetName) {
+	$(PLAYER_COLUMN_IMAGE).each(function() {
+		var id = $(this).attr("id");
+		if (id != (currentUsername + "PlayerImage") && !($(this).attr("src").includes("roles/"))) {
+			$(this).css("opacity", 0.25);
+		}
+	});
 }
 
 function questionModalIsOpen() {
@@ -632,7 +661,7 @@ function createCardHand(cardInfo) {
 				img.attr('onclick', "playCard(" + cardInfo[i].uid.toString() + ")");
 			}
 
-			img.css({"position": "absolute", "max-width": cardWidthPercent.toString() + '%', "z-index": 10+i, "margin-left": imageLeftXPercent + "%"});
+			img.css({"position": "absolute", "max-width": cardWidthPercent.toString() + '%', "margin-left": imageLeftXPercent + "%"});
 
 			img.appendTo(CARDS_IN_HAND_DIV);
 			setImageAfterLoading(img);
@@ -646,6 +675,7 @@ function createCardHand(cardInfo) {
 	$("#" + cardsInHandSpanId).html(usernameText + cardText);
 	$("#" + cardsInHandSpanId).css("margin-top", "3%");
 	$("#" + cardsInHandSpanId).addClass("play-text-header");
+	resetCardZIndeces();
 }
 
 function setImageAfterLoading(img){
@@ -671,9 +701,12 @@ function rejoinGame() {
 }
 
 function playerClickedOn(targetName, clickType) {
+	console.log("player clicked on 1");
 	if (new Date().getTime() - previousSocketTime >= (SOCKET_TIME_DIFFERENCE / 2)) {
 		socket.emit('player_clicked_on', username, targetName, clickType);
+		console.log("player clicked on 2");
 		clickingOnPlayer = false;
+		cardsAreBlurred = false;
 		updatePreviousSocketTime();
 	}
 }
@@ -685,40 +718,50 @@ function updatePreviousSocketTime() {
 /* Key press functions to enable players to send messages to the server using keyboard strokes. */
 
 $(document).keydown(function (e) {
-	var isRepeating = !!keysPressed[e.which];
+	if (KEYCODES_LIST.includes(e.which))
+	{
+		var isRepeating = !!keysPressed[e.which];
+		console.log("keydown", e.which, keysPressed);
 
-	if (!isRepeating) {
-	    keysPressed[e.which] = true;
-	    var numKeys = Object.keys(keysPressed).length;
+		if (!isRepeating) {
+		    keysPressed[e.which] = true;
+		    var numKeys = Object.keys(keysPressed).length;
 
-	    if (numKeys == 2) {
-		    if (16 in keysPressed) {
-			    if (e.which == 69) { // Shift-E, to end the turn.
-			    	socket.emit('ending_turn', username);
-			    }
+		    if (numKeys == 2) {
+			    if (16 in keysPressed) {
+				    if (e.which == 69) { // Shift-E, to end the turn.
+				    	socket.emit('ending_turn', username);
+				    	console.log("shift e");
+				    }
 
-			    else if (e.which == 67) { // Shift-C, to cancel the current action.
-			    	socket.emit('cancel_current_action', username);
-			    	lastCardUid = 0;
-		    		setCardOpacity(false);
-		    		clickingOnPlayer = false;
-		    		setPlayerClicks();
-			    }
+				    else if (e.which == 67) { // Shift-C, to cancel the current action.
+				    	socket.emit('cancel_current_action', username);
+				    	console.log("shift c");
 
-			    else if (e.which == 83) { // Shift-S, to trigger a special ability when applicable.
-			    	socket.emit('use_special_ability', username);
-			    }
-			}
-		}
+				    	lastCardUid = 0;
+			    		clickingOnPlayer = false;
+			    		cardsAreBlurred = false;
+			    		setCardOpacity(false);
+			    		setPlayerClicks();
+			    		resetCardZIndeces();
+				    }
 
-		if (numKeys == 1) {
-			if (13 in keysPressed) { // Enter, to close the info modal if it's open.
-				if ($(QUESTION_MODAL).is(':visible')) {
-					e.preventDefault();
+				    else if (e.which == 83) { // Shift-S, to trigger a special ability when applicable.
+				    	socket.emit('use_special_ability', username);
+				    	console.log("shift s");
+				    }
 				}
+			}
 
-				if (!waitingModalIsOpen() && !emporioModalIsOpen() && !kitCarlsonModalIsOpen()) {
-					closeInfoModal();
+			if (numKeys == 1) {
+				if (13 in keysPressed) { // Enter, to close the info modal if it's open.
+					if ($(QUESTION_MODAL).is(':visible')) {
+						e.preventDefault();
+					}
+
+					if (!waitingModalIsOpen() && !emporioModalIsOpen() && !kitCarlsonModalIsOpen()) {
+						closeInfoModal();
+					}
 				}
 			}
 		}
@@ -726,5 +769,7 @@ $(document).keydown(function (e) {
 });
 
 $(document).keyup(function (e) {
-    delete keysPressed[e.which];
+	if (KEYCODES_LIST.includes(e.which)) {
+	    delete keysPressed[e.which];
+	}
 });

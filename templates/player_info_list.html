@@ -2,13 +2,13 @@
     <div id="player_div_{{ p.username }}" class="playerInfoColumn column {{ 'eliminated' if not p.isAlive() }}" style="height: 100%; width: {{ (100 / playerInfoList|length) - 1 }}%;{% if p == playerInfoList[0] %} border-right: 3px white solid; border-top: 3px white solid; padding-left: 1%; {% endif %}">
     	<a data-toggle="tooltip" title="
     	<img style='max-width: 30%' src='{{ url_for('static', filename='/images/cards/actions/flipped_over.jpg')}}' class='centered centered_text'><span> X {{ p.cardsInHand|length }}</span>
-    		{% if p.jailStatus == 1 or p.hasTheDynamite() or p.cardsInPlay|length > 0 %}<br><br>{% endif %}
+    		{% if p.jailStatus == 1 or p.hasTheDynamite() %}<br><br>{% endif %}
     		{% if p.jailStatus == 1 %} <img style='max-width: 35%' src='{{ url_for('static', filename='/images/cards/actions/' + (p.getPrigione().uid)|string + '.jpg')}}'> {% endif %}
     		{% if p.hasTheDynamite() %} <img style='max-width: 35%' src='{{ url_for('static', filename='/images/cards/actions/72.jpg')}}'> {% endif %}<br><br>">
     		
     		<div class="centered_text">
 		        <h2 class="centered_text player-list-usernames" style="display: inline-block; color: white; text-decoration: underline;">{{ p.username }}</h2>
-		        {% if p.role == 'Sheriff' %} <img class="centered_text" style='max-width: 15%; display: inline-block; margin-top: -5%;' src="{{ url_for('static', filename='/images/badge.png')}}"> {% endif %}
+		        {% if p.role == 'Sheriff' %} <img class="centered_text" style='max-width: 13.5%; display: inline-block; margin-top: -5%;' src="{{ url_for('static', filename='/images/badge.png')}}"> {% endif %}
 		    </div>
 
     		<span style="font-size: 17.5px; color: white; margin-top: -1vh; margin-bottom: 1vh;" class="centered centered_text">
@@ -18,7 +18,7 @@
     		{% endif %}
     		</span>
 
-	        <img id="{{ p.username }}PlayerImage" src="{{ url_for('static', filename='/images/cards/' + ('characters/' if p.isAlive() else 'roles/') + (p.character.name|convertNameToPath if p.isAlive() else p.role.lower()) + '.jpg') }}" alt="{{ p.character.name }}" class="zoom_hover_1_5 centered player_column">
+	        <img id="{{ p.username }}PlayerImage" src="{{ url_for('static', filename='/images/cards/' + ('characters/' if p.isAlive() else 'roles/') + (p.character.name|convertNameToPath if p.isAlive() else p.role.lower()) + '.jpg') }}" alt="{{ p.character.name }}" class="zoom_hover_1_5 centered player_column player-column-image" {% if p.username in playersWaitingFor %} style="opacity: 0.25;" {% endif %}>
 	        <div class="centered player_column">
 	            {% for _ in range(p.lives) %}
 	                <img src="{{ url_for('static', filename='/images/bullet.png') }}" style="max-width: 17%;">

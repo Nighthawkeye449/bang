@@ -75,13 +75,11 @@ def loadGames():
 		if lobbyNumber not in lobbyDict:
 			lobbyDict[lobbyNumber] = loadGameFromJson(gameJson)
 
-	return lobbyDict
+	return {lobbyNumber: lobbyDict[lobbyNumber] for lobbyNumber in lobbyDict if not lobbyDict[lobbyNumber].gameOver}
 
 def deleteGame(lobbyNumber):
 	conn = getDatabaseConnection()
 	cur = conn.cursor()
-
-	gameJson = saveGameToJson(game)
 
 	sql = "DELETE * FROM saved_games WHERE lobbyNumber = {}".format(lobbyNumber)
 	cur.execute(sql)
@@ -205,7 +203,7 @@ def convertCardsDrawnToString(cards):
 		return "{}, {}, and {}".format(*[c.getDeterminerString() for c in cards])
 
 def getDeterminerString(name):
-	return "a{} {}".format("n" if isVowel(name[0]) else "", convertRawNameToDisplay(name))
+	return "{} {}".format("an" if isVowel(name[0]) else "a", convertRawNameToDisplay(name))
 
 def isVowel(c):
 	return c.lower() in ['a', 'e', 'i', 'o', 'u']
@@ -224,8 +222,8 @@ def getCardNameValueSuitFromAnswer(answer):
 def getCardsInPlayTemplate(player):
 	return Markup(render_template('cards_in_play.html', player=player))
 
-def getPlayerInfoListTemplate(playerInfoList):
-	return Markup(render_template('player_info_list.html', playerInfoList=playerInfoList))
+def getPlayerInfoListTemplate(playerInfoList, playersWaitingFor=list()):
+	return Markup(render_template('player_info_list.html', playerInfoList=playerInfoList, playersWaitingFor=playersWaitingFor))
 
 def createClickOnPlayersTuple(player, clickType, lastCardUid=0):
 	return (constants.CREATE_CLICK_ON_PLAYERS, {'clickType': clickType, 'lastCardUid': lastCardUid}, player)
@@ -294,7 +292,7 @@ def createEmporioTuples(alivePlayers, cardsLeft, playerPicking):
 			text = "Click on a card to choose it:"
 		else:
 			cardImagesTemplate = Markup(render_template('/modals/card_images.html', cards=cardsLeft))
-			text = "{} is picking a card:".format(playerPicking.username)
+			text = "{} is choosing a card:".format(playerPicking.username)
 
 		data = {'html': render_template('/modals/unclosable.html', text=text, header="Emporio", cardsTemplate=cardImagesTemplate, playerIsDead=(not p.isAlive()))}		
 
@@ -304,7 +302,7 @@ def createEmporioTuples(alivePlayers, cardsLeft, playerPicking):
 
 def createKitCarlsonTuple(player, cardChoices):
 	cardImagesTemplate = Markup(render_template('/modals/card_images.html', cards=cardChoices, clickFunction="pickKitCarlsonCard"))
-	text = "Kit Carlson, click on the card that you DON'T want to keep:"
+	text = "Kit Carlson, click the card you want to put back on the draw pile:"
 	data = {'html': render_template('/modals/unclosable.html', text=text, header="Drawing Cards", cardsTemplate=cardImagesTemplate, playerIsDead=False)}		
 
 	return createEmitTuples(constants.SHOW_INFO_MODAL, dict(data), recipients=[player])[0]
@@ -322,14 +320,17 @@ def createDiscardTuples(discardTop, gamePlayers):
 	return createEmitTuples(constants.UPDATE_DISCARD_PILE, {'path': constants.CARD_IMAGES_PATH.format(discardTop.uid if discardTop != None else constants.FLIPPED_OVER)}, recipients=[p for p in gamePlayers])
 
 # Tuple to update the player order/lives/etc. for everybody.
-def createPlayerInfoListTuple(playerInfoList, player):
-	return createEmitTuples(constants.UPDATE_PLAYER_LIST, {'html': getPlayerInfoListTemplate(playerInfoList)}, recipients=[p for p in playerInfoList] if player == None else [player])[0]
+def createPlayerInfoListTuple(playerInfoList, player, playersWaitingFor=list()):
+	return createEmitTuples(constants.UPDATE_PLAYER_LIST, {'html': getPlayerInfoListTemplate(playerInfoList, playersWaitingFor=playersWaitingFor)}, recipients=[p for p in playerInfoList] if player == None else [player])[0]
 
 def createDiscardClickTuples(player):
 	return [(constants.SLEEP, 0.2, None)] + createEmitTuples(constants.DISCARD_CLICK, dict(), recipients=[player])
 
 def createHealthAnimationTuples(playerUsername, healthChange, players):
 	return [(constants.HEALTH_ANIMATION, {'username': playerUsername, 'healthChange': healthChange}, p) for p in players]
+
+def createSetPlayerOpacityTuples(currentUsername, players):
+	return [(constants.SET_PLAYER_OPACITY, {'currentUsername': currentUsername}, p) for p in players]
 
 # Returns tuples that are processed by the server and emitted via socket.
 def createEmitTuples(emitString, data, recipients=[]):
@@ -367,7 +368,7 @@ def consolidateTuples(tuples):
 						addedAutomaticSleep = True
 						temp.append(t)
 					else:
-						temp.append((constants.SLEEP, random.randint(10, 20) / 10, None)) # Add a random delay between 1 and 2 seconds so that all the messages don't appear at once.
+						temp.append((constants.SLEEP, random.randint(10, 25) / 10, None)) # Add a random delay between 1 and 2.5 seconds so that the message timing seems more natural.
 				else:
 					temp.append(t)
 
@@ -381,10 +382,10 @@ def consolidateTuples(tuples):
 		for t in temp:
 			tuples.append(t)
 			
-			if t[0] == constants.UPDATE_ACTION and "won the game" in t[1]['update']:
+			if t[0] == constants.GAME_OVER:
 				gameIsOver = True
 			else:
-				if gameIsOver and t[0]:
+				if gameIsOver and t[0] != constants.GAME_OVER:
 					break
 
 		if gameIsOver:
