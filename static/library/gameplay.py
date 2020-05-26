@@ -1,3 +1,4 @@
+from static.library.card import Card
 from static.library.constants import *
 from static.library.playergame import PlayerGame
 from static.library import utils
@@ -19,6 +20,7 @@ class Gameplay(dict):
 		self.gameOver = False
 		self.remainingRoles = None
 		self.characters = None
+		self.includeExtraCharacters = True
 		self.remainingCharacters = None
 		self.currentTurn = 0
 		self.currentCard = None
@@ -30,12 +32,14 @@ class Gameplay(dict):
 		self.bangedThisTurn = False
 		self.emporioOptions = list()
 		self.duelPair = list()
-		self.updatesList = list() # A list of all updates throughout the game, which will be pulled whenever reloading the play page.
+		self.updatesList = list()
 		self.infoTupleDict = dict()
 		self.unansweredQuestions = dict()
 		self.playersWaitingFor = list()
 		self.clickingOnPlayerDict = dict()
-		self.specialAbilityCards = {SID_KETCHUM: None, SLAB_THE_KILLER: None, KIT_CARLSON: None}
+		self.clickingOnCardSet = set()
+		self.specialAbilityCards = {SID_KETCHUM: None, SLAB_THE_KILLER: None, KIT_CARLSON: None, DOC_HOLLYDAY: None, CLAUS_THE_SAINT: None}
+		self.specialAbilityCounter = {DOC_HOLLYDAY: 0, JOSE_DELGADO: 0, MOLLY_STARK: 0, UNCLE_WILL: 0}
 
 		dict.__init__(self)
 
@@ -59,7 +63,7 @@ class Gameplay(dict):
 		self.started = True
 		num_players = len(self.players)
 
-		self.characters = utils.loadCharacters()
+		self.characters = utils.loadCharacters(self.includeExtraCharacters)
 		self.remainingCharacters = list(self.characters)
 
 		if num_players == 4: self.remainingRoles = [SHERIFF, OUTLAW, OUTLAW, RENEGADE]
@@ -124,7 +128,7 @@ class Gameplay(dict):
 
 		emitTuples.append((RELOAD_PLAY_PAGE, {'html': self.renderPlayPageForPlayer(username), 'cardInfo': player.getCardInfo(player == self.playerOrder[0])}, player))
 		emitTuples.append((SLEEP, 1, None))
-		emitTuples.append(utils.createCardCarouselTuple(player, player == self.playerOrder[0]))
+		emitTuples.append(utils.createCardsInHandTuple(player, player == self.playerOrder[0]))
 		emitTuples.append(utils.createCardsInPlayTuple(player))
 		emitTuples += [utils.createUpdateTupleForPlayer(update, player) for update in self.updatesList]
 
@@ -135,6 +139,13 @@ class Gameplay(dict):
 			elif username in self.clickingOnPlayerDict:
 				clickType, lastCardUid = self.clickingOnPlayerDict[username]
 				emitTuples.append(utils.createClickOnPlayersTuple(player, clickType, lastCardUid=lastCardUid))
+			elif username in self.clickingOnCardSet:
+				if player.character.name in [SID_KETCHUM, DOC_HOLLYDAY]:
+					emitTuples.extend(utils.createDiscardClickTuples(player))
+				elif player.character.name == JOSE_DELGADO:
+					emitTuples.extend(utils.createAbilityCardClickTuples(player, JOSE_DELGADO_CLICK))
+				elif player.character.name == UNCLE_WILL:
+					emitTuples.extend(utils.createAbilityCardClickTuples(player, UNCLE_WILL_CLICK))
 			elif username in self.infoTupleDict:
 				emitTuples.append(self.infoTupleDict[username])
 
@@ -176,7 +187,10 @@ class Gameplay(dict):
 			elif self.specialAbilityCards[SID_KETCHUM] != None:
 				utils.logGameplay("{} tried to end their turn but Sid Ketchum needs to finish discarding cards for his special ability first.".format(username))
 				sidKetchumText = "Sid Ketchum needs" if self.players[username].character.name != SID_KETCHUM else "You need"
-				return [self.createInfoTuple("Hold on. {} to finish discarding cards for his ability first.".format(), self.players[username])]
+				return [self.createInfoTuple("Hold on. {} to finish discarding cards for his ability first.".format(sidKetchumText), self.players[username])]
+			elif self.specialAbilityCards[DOC_HOLLYDAY] != None:
+				utils.logGameplay("{} tried to end their turn but s/he needs to finish using Doc Hollyday's special ability first.".format(username))
+				return [self.createInfoTuple("Finish using your ability before ending your turn.", self.players[username])]
 			elif self.currentCard != None or not self.currentCardCanBeReset():
 				utils.logGameplay("{} tried to end their turn but something (current card? {}) is still being processed.".format(username, self.currentCard))
 				infoText = "You can't end your turn " + ("right now." if self.currentCard == None else "while the {} is still being played!".format(self.currentCard.getDisplayName()))
@@ -217,6 +231,7 @@ class Gameplay(dict):
 					emitTuples.extend(utils.createUpdateTuples(updateString, self.players.values()))
 
 			self.discardingCards = False
+			self.specialAbilityCounter = {k: 0 for k in self.specialAbilityCounter} # Reset the special ability counter after each turn.
 
 			if self.currentTurn > 0 and self.playerOrder[0].jailStatus == 0:
 				emitTuples.extend(self.createUpdates("{} ended their turn.".format(self.getCurrentPlayerName())))
@@ -255,7 +270,7 @@ class Gameplay(dict):
 
 		# Generate all the tuples to update every player's screen for the new turn.
 		for p in self.playerOrder:
-			emitTuples.append(utils.createCardCarouselTuple(p, p == self.playerOrder[0]))
+			emitTuples.append(utils.createCardsInHandTuple(p, p == self.playerOrder[0]))
 			emitTuples.append(utils.createCardsInPlayTuple(p))
 
 		emitTuples.extend(self.getDiscardTuples(self.getTopDiscardCard()))
@@ -278,29 +293,57 @@ class Gameplay(dict):
 		if player != self.playerOrder[0]:
 			return []
 
-		if username in self.playersWaitingFor or username in self.unansweredQuestions:
+		if (username in self.playersWaitingFor or username in self.unansweredQuestions) and \
+				(player.character.name not in self.specialAbilityCards or self.specialAbilityCards[player.character.name] == None):
 			return []
 
 		if self.discardingCards:
 			if "discarded" not in self.updatesList[-1]:
 				self.discardingCards = False
 				emitTuples.append(self.createInfoTuple("You canceled discarding.", player))
-				emitTuples.append(utils.createCardCarouselTuple(player, True))
+				emitTuples.append(utils.createCardsInHandTuple(player, True))
 			else:
 				emitTuples.append(self.createInfoTuple("You've already discarded, so you can't cancel anymore.", player))
+		
+		elif username in self.clickingOnCardSet:
+			if player.character.name in [SID_KETCHUM, DOC_HOLLYDAY]:
+				canCancel = self.specialAbilityCards[player.character.name] == None or len(self.specialAbilityCards[player.character.name]) == 0
+			elif player.character.name in [JOSE_DELGADO, UNCLE_WILL]:
+				canCancel = True
+			else:
+				utils.logError("{} is in the clickingOnCardSet but isn't one of the expected characters.".format(player.getLogString()))
+				return []
+
+			if canCancel:
+				self.clickingOnCardSet.remove(username)
+
+				if player.character.name in self.specialAbilityCards:
+					self.specialAbilityCards[player.character.name] = None
+
+				emitTuples.append(self.createInfoTuple("You canceled your ability.", player))
+			else:
+				emitTuples.append(self.createInfoTuple("Sorry, you can't cancel in the middle of using your ability.", player))
+				emitTuples.extend(utils.createDiscardClickTuples(player))
+		
 		else:
 			if self.currentCard == None:
 				utils.logError("{} is canceling, but isn't discarding and the current card is set to None.".format(player.getLogString()))
 				return []
+			elif self.currentCard.uid == -1:
+				emitTuples = [self.createInfoTuple("Sorry, you can't cancel in the middle of using your ability.", player)]
+
+				if player.character.name == DOC_HOLLYDAY:
+					emitTuples.append(self.createClickOnPlayersTuple(player, DOC_HOLLYDAY_CLICK))
 
 			# Only tell the player s/he canceled if s/he only has 1 card in hand.
 			if len(player.cardsInHand) == 1:
 				emitTuples.append(self.createInfoTuple("You canceled your {}.".format(self.currentCard.getDisplayName()), player))
 			
-			self.currentCard = None
+			if self.currentCard.uid != -1:
+				self.currentCard = None
 
-		if username in self.clickingOnPlayerDict:
-			del self.clickingOnPlayerDict[username]
+				if username in self.clickingOnPlayerDict:
+					del self.clickingOnPlayerDict[username]
 
 		return emitTuples
 
@@ -363,7 +406,7 @@ class Gameplay(dict):
 		if n > 1:
 			self.drawCardsForPlayer(player, n-1)
 
-	def drawCardsForPlayerTurn(self, player, extraInfo=''):
+	def drawCardsForPlayerTurn(self, player, extraInfo=None):
 		if player.character.name == BLACK_JACK:
 			self.drawCardsForPlayer(player, 2)
 			if player.cardsInHand[-1].suit in [HEART, DIAMOND]: # Black Jack gets to draw one more if the second card is a heart or diamond.
@@ -378,7 +421,7 @@ class Gameplay(dict):
 				result.append(self.drawOneCard())
 		
 		elif player.character.name == JESSE_JONES: # For Jesse Jones, extraInfo will either be empty or the username of the player to draw from.
-			if extraInfo:
+			if extraInfo != None:
 				opponent = self.players[extraInfo]
 				player.addCardToHand(opponent.panico())
 				utils.logGameplay("{} drew {} ({}) from the hand of {}.".format(player.getLogString(), player.cardsInHand[-1].getDeterminerString(), player.cardsInHand[-1].uid, opponent.username))
@@ -389,14 +432,23 @@ class Gameplay(dict):
 			result = player.cardsInHand[-2:]
 		
 		elif player.character.name == PEDRO_RAMIREZ: # For Pedro Ramirez, extraInfo will be non-empty if the discard pile should be used for the first card.
-			if extraInfo:
+			if extraInfo != None:
 				player.addCardToHand(self.discardPile.pop())
 				self.drawCardsForPlayer(player)
 			else:
 				self.drawCardsForPlayer(player, 2)
 			
 			result = player.cardsInHand[-2:]
-		
+
+		elif player.character.name == BILL_NOFACE:
+			numCardsToDraw = 1 + (player.lifeLimit - player.lives)
+			self.drawCardsForPlayer(player, numCardsToDraw)
+			result = player.cardsInHand[-numCardsToDraw:]
+
+		elif player.character.name == PIXIE_PETE:
+			self.drawCardsForPlayer(player, 3)
+			result = player.cardsInHand[-3:]
+
 		else:
 			# Default case.
 			self.drawCardsForPlayer(player, 2)
@@ -409,9 +461,10 @@ class Gameplay(dict):
 		return utils.createDiscardTuples(card, self.players.values())
 
 	def discardCard(self, player, card):
-		player.getRidOfCard(card)
-		self.discardPile.append(card)
-		utils.logGameplay("Adding {} (UID: {}) to the discard pile.".format(card.getDeterminerString(), card.uid))
+		if card.uid != -1:
+			player.getRidOfCard(card)
+			self.discardPile.append(card)
+			utils.logGameplay("Adding {} (UID: {}) to the discard pile.".format(card.getDeterminerString(), card.uid))
 
 	def playerDiscardingCard(self, username, uid):
 		player = self.players[username]
@@ -422,7 +475,7 @@ class Gameplay(dict):
 			utils.logError("{} is trying to discard {} (UID: {}) but doesn't have it in their possession.".format(player.getLogString(), card.name, uid))
 			return []
 
-		if player.character.name != SID_KETCHUM or self.specialAbilityCards[SID_KETCHUM] == None:
+		if not self.playerIsDiscardingForAbility(player):
 			if player.countExcessCards() == 0:
 				utils.logError("{} tried to discard a card but is already at/under the limit.".format(player.getLogString()))
 				return []
@@ -431,7 +484,7 @@ class Gameplay(dict):
 
 			emitTuples.extend(self.getDiscardTuples(self.getTopDiscardCard()))
 			emitTuples.extend(self.createUpdates("{} discarded {}.".format(username, card.getDeterminerString())))
-			emitTuples.append(utils.createCardCarouselTuple(player, True))
+			emitTuples.append(utils.createCardsInHandTuple(player, True))
 
 			excessCards = player.countExcessCards()
 			if excessCards == 0:
@@ -441,22 +494,8 @@ class Gameplay(dict):
 				utils.logGameplay("{} discarded a card but still has {} excess card(s). Enabling discard click again.".format(player.getLogString(), excessCards))
 				emitTuples.extend(utils.createDiscardClickTuples(player))
 
-		# Process Sid Ketchum discarding cards for his special ability here.
 		else:
-			self.specialAbilityCards[SID_KETCHUM].append(card)
-
-			if len(self.specialAbilityCards[SID_KETCHUM]) == 1:
-				# Temporarily remove the card from the hand to show an updated hand in the UI.
-				player.getRidOfCard(card)
-
-				emitTuples.append(utils.createCardCarouselTuple(player, player == self.playerOrder[0]))
-
-				player.cardsInHand.append(card) # Re-insert the card because it properly gets discarded later.
-
-				emitTuples.extend(utils.createDiscardClickTuples(player))
-
-			else: # Both cards have been selected, so actually discard them and gain the life.
-				emitTuples = self.processSidKetchumAbility(player)
+			emitTuples.extend(self.processPlayerDiscardingForAbility(player, card))
 
 		return emitTuples
 
@@ -479,9 +518,13 @@ class Gameplay(dict):
 			return []
 
 		elif self.specialAbilityCards[SID_KETCHUM] != None:
-				utils.logGameplay("{} tried to play a card but Sid Ketchum needs to finish discarding cards for his special ability first.".format(username))
-				sidKetchumText = "Sid Ketchum needs" if self.players[username].character.name != SID_KETCHUM else "You need"
-				return [self.createInfoTuple("Hold on. {} to finish discarding cards for his ability first.".format(), self.players[username])]
+			utils.logGameplay("{} tried to play a card but Sid Ketchum needs to finish discarding cards for his special ability first.".format(username))
+			sidKetchumText = "Sid Ketchum needs" if self.players[username].character.name != SID_KETCHUM else "You need"
+			return [self.createInfoTuple("Hold on. {} to finish discarding cards for his ability first.".format(), self.players[username])]
+
+		elif self.specialAbilityCards[DOC_HOLLYDAY] != None:
+			utils.logGameplay("{} tried to play a card but s/he needs to finish using Doc Hollyday's special ability first.".format(username))
+			return []
 		
 		utils.logServer("Received socket message from {} to play {} (UID: {}) (current card: {}).".format(username, card.getDisplayName(), uid, self.currentCard))
 
@@ -544,7 +587,7 @@ class Gameplay(dict):
 
 		elif card.name == SALOON:
 			if all([p.lives == p.lifeLimit for p in self.getAlivePlayers()]):
-				response = "You can't play a Saloon right now - no one would gain a life!"
+				response = "You can't play a Saloon right now because nobody would gain a life!"
 			else:
 				response = OK_MSG
 
@@ -607,12 +650,12 @@ class Gameplay(dict):
 			player.getRidOfCard(card)
 
 		# Make sure the card is removed from the player's hand in the UI.
-		emitTuples.append(utils.createCardCarouselTuple(player, player == self.playerOrder[0]))
+		emitTuples.append(utils.createCardsInHandTuple(player, player == self.playerOrder[0]))
 
 		# Handle Suzy Lafayette's ability for when she's the current player.
 		# The exception is a duel - in that case, the card shouldn't be drawn until after the duel ends.
 		if card.name != DUELLO and player.character.name == SUZY_LAFAYETTE:
-			emitTuples.extend(self.processSuzyLafayetteAbility(player))
+			emitTuples.extend(self.processSuzyLafayetteMollyStarkAbility(player))
 
 		# Checking that these are valid moves has already been done in the validateCardChoice and validateTargetChoice methods.
 		if targetName == None:
@@ -620,6 +663,10 @@ class Gameplay(dict):
 				player.cardsInPlay.append(card)
 				emitTuples.append(utils.createCardsInPlayTuple(player))
 				emitTuples.extend(self.createUpdates("{} put {} in play.".format(player.username, card.getDeterminerString())))
+
+				# Take away all other cards of this type if the player is Johnny Kisch.
+				if player.character.name == JOHNNY_KISCH:
+					emitTuples.extend(self.processJohnnyKischAbility(player, card))
 
 			elif card.name == DYNAMITE:
 				player.specialCards.append(card)
@@ -632,8 +679,16 @@ class Gameplay(dict):
 
 			elif card.name == BIRRA:
 				player.gainOneLife()
-				emitTuples.extend(self.createUpdates("{} played a Birra and now has {} lives.".format(player.username, player.lives)))
-				emitTuples.extend(utils.createHealthAnimationTuples(player.username, 1, self.playerOrder))
+				updateString = "{} played a Birra and now has {} lives.".format(player.username, player.lives)
+				livesGained = 1
+
+				if player.character.name == TEQUILA_JOE and player.lives < player.lifeLimit:
+					player.gainOneLife()
+					updateString = "{} played a Birra and gained 2 lives using Tequila Joe's ability.".format(player.username)
+					livesGained = 2
+
+				emitTuples.extend(self.createUpdates(updateString))
+				emitTuples.extend(utils.createHealthAnimationTuples(player.username, livesGained, self.playerOrder))
 
 			if card.name == SALOON:
 				for p in self.getAlivePlayers():
@@ -648,30 +703,12 @@ class Gameplay(dict):
 				numCards = 3 if card.name == WELLS_FARGO else 2
 				self.drawCardsForPlayer(player, numCards)
 				emitTuples.extend(self.createUpdates("{} played {} and drew {} cards.".format(player.username, card.getDeterminerString(), numCards)))
-				emitTuples.append(utils.createCardCarouselTuple(player, True))
+				emitTuples.append(utils.createCardsInHandTuple(player, True))
 				emitTuples.extend(self.getDiscardTuples(self.getTopDiscardCard()))
 				emitTuples.append(self.createCardsDrawnTuple(player, "You drew {} cards for {}:".format(numCards, card.getDisplayName()), player.cardsInHand[-numCards:], startingTurn=False))
 
 			elif card.name == EMPORIO:
-				# Get one card option for each non-eliminated player and show all players the choices.
-				self.emporioOptions = list()
-				for _ in range(len(self.getAlivePlayers())):
-					self.emporioOptions.append(self.drawOneCard())
-				
-				emitTuples.extend(self.createUpdates("{} played an Emporio!".format(player.username)))
-
-				if len({c.name for c in self.emporioOptions}) > 1:
-					utils.logGameplay("Initial options for Emporio for {}: {}".format([p.username for p in self.getAlivePlayers()], [c.uid for c in self.emporioOptions]))
-					self.playersWaitingFor.append(player.username)
-
-					emporioTuples = utils.createEmporioTuples(self.getAlivePlayers(), self.emporioOptions, player)
-					for t in emporioTuples:
-						self.infoTupleDict[t[2].username] = t
-						emitTuples.extend(emporioTuples)
-
-				else:
-					utils.logGameplay("All intial options for Emporio are the same. Distributing 1 card to each player automatically.")
-					emitTuples.extend(self.processEmporioAutomatic(self.getAlivePlayers()[0]))
+				emitTuples.extend(self.setupEmporio(player))
 
 			elif card.name in [GATLING, INDIANS]:
 				emitTuples.extend(self.processBangGatlingIndians(player, card.name))
@@ -751,6 +788,9 @@ class Gameplay(dict):
 			utils.logGameplay("{} tried to play {} against {}, who is already eliminated.".format(player.getLogString(), card.getDeterminerString(), target.getLogString()))
 			result = "{} isn't in the game anymore!".format(target.username)
 
+		elif card.suit == DIAMOND and target.character.name == APACHE_KID:
+			result = "Cards of Diamonds have no effect against Apache Kid!"
+
 		elif self.isEffectiveBang(player, card.name):
 			result = self.targetIsInRange(player, target)
 			utils.logGameplay("Result for whether {} is in range of {} for a Bang: {}".format(target.username, player.username, result))
@@ -795,7 +835,7 @@ class Gameplay(dict):
 	def calculateEffectiveDistance(self, player, target):
 		targetIndex = self.getAlivePlayers().index(target)
 		baseDistance = min(targetIndex, len(self.getAlivePlayers()) - targetIndex)
-		result = baseDistance - player.getScopeDistance() + target.getMustangDistance()
+		result = baseDistance - player.getScopeDistance() + (target.getMustangDistance() if player.character.name != BELLE_STAR else 0)
 
 		utils.logGameplay("Calculated an effective distance of {} from {} to {}.".format(result, player.username, target.username))
 		return result
@@ -824,7 +864,7 @@ class Gameplay(dict):
 		if player == self.playerOrder[0]:
 
 			# If the character isn't Jesse Jones/Kit Carlson/Pedro Ramirez, you can always just draw from the deck.
-			if player.character.name not in [JESSE_JONES, KIT_CARLSON, PEDRO_RAMIREZ]:
+			if player.character.name not in [JESSE_JONES, KIT_CARLSON, PEDRO_RAMIREZ, PAT_BRENNAN, CLAUS_THE_SAINT]:
 				cardsDrawn = self.drawCardsForPlayerTurn(player)
 				description = "You drew {}.".format(utils.convertCardsDrawnToString(cardsDrawn))
 				self.drawingToStartTurn = False
@@ -833,6 +873,8 @@ class Gameplay(dict):
 					if len(cardsDrawn) == 3:
 						description = "You drew 3 cards because the 2nd one is a {}.".format(cardsDrawn[1].suit)
 					updateString = "{} drew {} cards. The second card was {}.".format(player.username, len(cardsDrawn), cardsDrawn[1].getDeterminerString())
+				elif player.character.name == PIXIE_PETE:
+					updateString = "{} drew 3 cards from the deck.".format(player.username)
 				else:
 					updateString = DREW_2_CARDS.format(player.username)
 
@@ -874,7 +916,41 @@ class Gameplay(dict):
 					else:
 						return [self.addQuestion(player, QUESTION_PEDRO_RAMIREZ, [FROM_DISCARD, FROM_THE_DECK])]
 
-			emitTuples.append(utils.createCardCarouselTuple(player, True))
+				elif player.character.name == PAT_BRENNAN:
+					# Pat Brennan can only use his special ability if anyone has any in-play cards.
+					if len(self.getPlayersWithCardsInPlay(player.username)) == 0:
+						cardsDrawn = self.drawCardsForPlayerTurn(player)
+						description = "You drew {} from the deck (no one has any in-play cards right now).".format(utils.convertCardsDrawnToString(cardsDrawn))
+						self.drawingToStartTurn = False
+						
+						emitTuples.append(self.createCardsDrawnTuple(player, description, cardsDrawn))
+						emitTuples.extend(self.createUpdates(DREW_2_CARDS.format(player.username)))
+
+					else:
+						return [self.addQuestion(player, QUESTION_PAT_BRENNAN, [FROM_IN_PLAY, FROM_THE_DECK])]
+
+				elif player.character.name == CLAUS_THE_SAINT:
+					# Get two card options for Claus The Saint and one for every other non-eliminated player.
+					self.specialAbilityCards[CLAUS_THE_SAINT] = list()
+					for _ in range(len(self.getAlivePlayers()) + 1):
+						self.specialAbilityCards[CLAUS_THE_SAINT].append(self.drawOneCard())
+					
+					if len({c.name for c in self.specialAbilityCards[CLAUS_THE_SAINT]}) > 1:
+						utils.logGameplay("Initial options for Claus the Saint's ability: {}".format([(c.name, c.uid) for c in self.specialAbilityCards[CLAUS_THE_SAINT]]))
+						self.playersWaitingFor.append(player.username)
+
+						clausTheSaintTuple = utils.createClausTheSaintTuple(player, "Click on the first card you want to keep for yourself:", self.specialAbilityCards[CLAUS_THE_SAINT])
+						utils.logGameplay("Initial tuple for Claus the Saint: {}".format(clausTheSaintTuple))
+						self.infoTupleDict[player.username] = clausTheSaintTuple
+						emitTuples.append(clausTheSaintTuple)
+
+					else:
+						utils.logGameplay("All initial options for Claus The Saint's ability are the same. Distributing cards to players automatically.")
+						emitTuples.extend(self.processClausTheSaintCardSelection(player.username, self.specialAbilityCards[CLAUS_THE_SAINT][-1].uid))
+
+					return emitTuples
+
+			emitTuples.append(utils.createCardsInHandTuple(player, True))
 			return emitTuples
 
 		# For players who aren't currently on their turn. It's only used once so there's no utils function for this.
@@ -906,7 +982,7 @@ class Gameplay(dict):
 
 		# Handle the responses for characters who have special start-of-turn draws. 
 		if self.drawingToStartTurn:
-			if player.character.name in [JESSE_JONES, PEDRO_RAMIREZ]:
+			if player.character.name in [JESSE_JONES, PEDRO_RAMIREZ, PAT_BRENNAN]:
 				emitTuples = self.processAbilityQuestionResponse(username, question, answer)
 			else:
 				utils.logError("{} shouldn't be answering a modal question while drawing for cards to start the turn.".format(player.getLogString()))
@@ -973,13 +1049,13 @@ class Gameplay(dict):
 					else:
 						self.playersWaitingFor.append(player.username)
 
-						# If the player isn't Calamity Janet, or if Calamity only has 1 type of required card, just automatically play the required card(s) for him/her.
-						if player.character.name != CALAMITY_JANET or len(set([c.name for c in requiredCardsInHand])) == 1:
+						# If the player can't choose, just automatically play the required cards.
+						if not self.playerCanChooseResponseCard(player, requiredCardName, requiredCardsInHand):
 							card = requiredCardsInHand[0]
 							emitTuples.append((SLEEP, 0.5, None))
-							emitTuples.extend(self.processBlurCardSelection(player.username, requiredCardsInHand[-1].uid))
+							emitTuples.extend(self.processBlurCardSelection(player.username, card.uid))
 
-						# Otherwise, blur the non-Bangs/Mancatos for Calamity and have him/her choose which one to use.
+						# Otherwise, blur any applicable cards and have the player choose which ones to use.
 						else:
 							emitTuples = utils.createCardBlurTuples(player, requiredCardName)
 
@@ -1036,12 +1112,12 @@ class Gameplay(dict):
 				emitTuples.extend(self.createUpdates("{} played a Cat Balou on {}, who had to discard {}.".format(player.username, target.username, discardCardString)))
 			
 			self.currentCard = None
-			emitTuples.append(utils.createCardCarouselTuple(player, True))
+			emitTuples.append(utils.createCardsInHandTuple(player, True))
 			emitTuples.append(utils.createCardsInPlayTuple(target))
-			emitTuples.append(utils.createCardCarouselTuple(target, False))
+			emitTuples.append(utils.createCardsInHandTuple(target, False))
 
 			if target.character.name == SUZY_LAFAYETTE:
-				emitTuples.extend(self.processSuzyLafayetteAbility(target))
+				emitTuples.extend(self.processSuzyLafayetteMollyStarkAbility(target))
 
 		else:
 			if len(target.cardsInHand) > 0 and len(target.getCardsOnTable()) == 0: # Have to steal from the hand.
@@ -1070,7 +1146,7 @@ class Gameplay(dict):
 			effectiveDisplayName = "Bang" if (player.character.name != CALAMITY_JANET or card.name != MANCATO) else MANCATO_AS_BANG
 			emitTuples = self.createUpdates("{} responded by playing a {}.".format(player.username, effectiveDisplayName))
 			emitTuples.extend(self.getDiscardTuples(card))
-			emitTuples.append(utils.createCardCarouselTuple(player, player == self.playerOrder[0]))
+			emitTuples.append(utils.createCardsInHandTuple(player, player == self.playerOrder[0]))
 
 			# Only add the waiting tuple if the attacker has any cards in his/her hand.
 			if len(attacker.cardsInHand) > 0:
@@ -1087,8 +1163,8 @@ class Gameplay(dict):
 				emitTuples.extend(self.processPlayerTakingDamage(attacker, attacker=player))
 
 				for dueller in self.duelPair:
-					if dueller.isAlive() and dueller.character.name == SUZY_LAFAYETTE:
-						emitTuples.extend(self.processSuzyLafayetteAbility(dueller)) # Now that the duel is over, Suzy Lafayette can use her ability.
+					if dueller.isAlive() and dueller.character.name in [SUZY_LAFAYETTE, MOLLY_STARK]:
+						emitTuples.extend(self.processSuzyLafayetteMollyStarkAbility(dueller)) # Now that the duel is over, Suzy Lafayette/Molly Stark can use her ability.
 
 				self.duelPair = list()
 
@@ -1097,13 +1173,15 @@ class Gameplay(dict):
 				emitTuples.extend(self.processPlayerTakingDamage(player, attacker=attacker))
 
 				for dueller in self.duelPair:
-					if dueller.isAlive() and dueller.character.name == SUZY_LAFAYETTE:
-						emitTuples.extend(self.processSuzyLafayetteAbility(dueller)) # Now that the duel is over, Suzy Lafayette can use her ability.
+					if dueller.isAlive() and dueller.character.name in [SUZY_LAFAYETTE, MOLLY_STARK]:
+						emitTuples.extend(self.processSuzyLafayetteMollyStarkAbility(dueller)) # Now that the duel is over, Suzy Lafayette/Molly Stark can use her ability.
 
 				self.duelPair = list()
 
 			elif answer == PLAY_A_BANG:
 				bangsInHand = player.getCardTypeFromHand(BANG)
+				if player.character.name == MOLLY_STARK:
+					self.specialAbilityCounter[MOLLY_STARK] += 1 # Count how many Bangs Molly Stark uses because she needs to draw that many cards once the duel ends.
 
 				# If the player isn't Calamity Janet, or if Calamity only has 1 effective Bang, just automatically play the card(s) for him/her.
 				if player.character.name != CALAMITY_JANET or len(set([c.name for c in bangsInHand])) == 1:
@@ -1123,7 +1201,7 @@ class Gameplay(dict):
 	def processPlayerTakingDamage(self, player, damage=1, attacker=None):
 		emitTuples = []
 		opponents = self.getAliveOpponents(player.username)
-		stayedAliveWithBirras = 0
+		requiredBirras = 0
 
 		if attacker != None and player.username == attacker.username:
 			utils.logError("{} shouldn't be able to damage himself/herself.".format(player.getLogString()))
@@ -1156,7 +1234,7 @@ class Gameplay(dict):
 
 		# Handle the player potentially being eliminated.
 		if not player.isAlive():
-			requiredBirras = abs(player.lives) + 1
+			requiredBirras = (abs(player.lives) + 1) if player.character.name != TEQUILA_JOE else ((abs(player.lives)) // 2) + 1
 			birrasInHand = player.getCardTypeFromHand(BIRRA)
 			if len(birrasInHand) < requiredBirras or len(self.getAlivePlayers()) == 1: # Without enough Birras, or if it's 1-v-1, the player is eliminated.
 				player.lives = 0
@@ -1178,7 +1256,7 @@ class Gameplay(dict):
 					self.discardPile = []
 
 					emitTuples.extend(self.createUpdates(isGameOverResult))
-					emitTuples.extend([utils.createCardCarouselTuple(p, p == self.playerOrder[0]) for p in self.playerOrder])
+					emitTuples.extend([utils.createCardsInHandTuple(p, p == self.playerOrder[0]) for p in self.playerOrder])
 					emitTuples.extend(self.getDiscardTuples(self.getTopDiscardCard()))
 					emitTuples.extend([utils.createGameOverTuple(p, isGameOverResult) for p in self.playerOrder])
 
@@ -1205,24 +1283,8 @@ class Gameplay(dict):
 					if self.getDynamiteCard() in player.specialCards:
 						self.discardCard(player, self.getDynamiteCard())
 
-					# If Vulture Sam is one of the game's alive players, use his special ability.
-					vultureSam = utils.getUniqueItem(lambda p: p.character.name == VULTURE_SAM, self.getAlivePlayers())
-					vultureSamSheriffException = vultureSam != None and vultureSam == attacker and vultureSam.role == SHERIFF and player.role == VICE
-					if not vultureSamSheriffException and vultureSam != None and vultureSam != player:
-						if len(player.cardsInHand + player.getCardsOnTable()) > 0:
-							vultureSam.cardsInHand.extend(player.cardsInHand + player.getCardsOnTable())
-							
-							emitTuples.append((SLEEP, 0.5, None))
-							emitTuples.append(self.createInfoTuple("You got all of {}'s cards because they were eliminated!".format(player.username), vultureSam))
-							emitTuples.extend(self.createUpdates("{} got all of {}'s cards using Vulture Sam's ability.".format(vultureSam.username, player.username)))
-							emitTuples.append(utils.createCardCarouselTuple(vultureSam, vultureSam == self.playerOrder[0]))
-
-						else:
-							emitTuples.append(self.createInfoTuple("You couldn't use Vulture Sam's ability because {} had no cards.".format(player.username), vultureSam))
-					
-					# Otherwise, just normally discard all of the player's cards.
-					else:
-						self.discardPile.extend(player.cardsInHand + player.getCardsOnTable())
+					emitTuples.extend(self.processPlayerEliminatedAbilities(attacker, player))
+					self.discardPile.extend(player.cardsInHand + player.getCardsOnTable())
 
 					player.cardsInHand = []
 					player.cardsInPlay = []
@@ -1230,7 +1292,7 @@ class Gameplay(dict):
 					player.jailStatus = 0
 
 					emitTuples.extend(self.getDiscardTuples(self.getTopDiscardCard()))
-					emitTuples.append(utils.createCardCarouselTuple(player, player == self.playerOrder[0]))
+					emitTuples.append(utils.createCardsInHandTuple(player, player == self.playerOrder[0]))
 					emitTuples.append(utils.createCardsInPlayTuple(player))
 
 					# Handle the cases where eliminating a player has a penalty or reward.
@@ -1254,20 +1316,19 @@ class Gameplay(dict):
 						emitTuples.append(self.createInfoTuple(infoText, attacker))
 						emitTuples.extend(self.createUpdates(updateText))
 						emitTuples.extend(self.getDiscardTuples(self.getTopDiscardCard()))
-						emitTuples.append(utils.createCardCarouselTuple(attacker, attacker == self.playerOrder[0]))
+						emitTuples.append(utils.createCardsInHandTuple(attacker, attacker == self.playerOrder[0]))
 
-			else: # With enough Birras, the player stays in the game. Play as many as necessary to bring the player back to 1 life.
-				player.lives = 1
-				stayedAliveWithBirras = requiredBirras
+			else: # With enough Birras, the player stays in the game. Play as many as necessary to bring the player back to life.
+				player.lives = player.lives + (requiredBirras * (1 if player.character.name != TEQUILA_JOE else 2))
 
 				for birra in birrasInHand[:requiredBirras]:
 					self.discardCard(player, birra)
 				
 				emitTuples.extend(self.getDiscardTuples(self.getTopDiscardCard()))
-				emitTuples.append(utils.createCardCarouselTuple(player, player == self.playerOrder[0]))
+				emitTuples.append(utils.createCardsInHandTuple(player, player == self.playerOrder[0]))
 
-				if player.character.name == SUZY_LAFAYETTE:
-					emitTuples.extend(self.processSuzyLafayetteAbility(player))
+				if player.character.name in [SUZY_LAFAYETTE, MOLLY_STARK]:
+					emitTuples.extend(self.processSuzyLafayetteMollyStarkAbility(player))
 
 				# Update the player's info modal and update everyone else's action screen.
 				birraString = "a Birra" if requiredBirras == 1 else "{} Birras".format(requiredBirras)
@@ -1300,9 +1361,9 @@ class Gameplay(dict):
 				cardString = player.cardsInHand[-1].getDeterminerString() if damage == 1 else "{} cards".format(damage)
 				utils.logGameplay("{} drawing {} because they lost {}".format(player.getLogString(), cardString, lostLivesString))
 
-				emitTuples.append(utils.createCardCarouselTuple(player, player == self.playerOrder[0]))
+				emitTuples.append(utils.createCardsInHandTuple(player, player == self.playerOrder[0]))
 				emitTuples.extend(self.getDiscardTuples(self.getTopDiscardCard()))
-				emitTuples.append(self.createInfoTuple("You drew {} because you lost {}!".format(cardString, lostLivesString), player))
+				emitTuples.append(self.createInfoTuple("You drew {} because you lost {}!".format(cardString, lostLivesString), player), cards=player.cardsInHand[-damage:])
 				emitTuples.extend(self.createUpdates("{} drew {} using Bart Cassidy's ability.".format(player.username, "a card" if damage == 1 else "{} cards".format(damage))))
 
 			elif player.character.name == EL_GRINGO and self.playerOrder[0] != player and attacker != None: # El Gringo draws a card from the player's hand anytime a player deals him damage.
@@ -1315,20 +1376,20 @@ class Gameplay(dict):
 					emitTuples.append(self.createInfoTuple("You stole {} from {}'s hand because they made you lose a life!".format(stolenCard.getDeterminerString(), attacker.username), player))
 					emitTuples.append(self.createInfoTuple("{} stole {} from your hand because you made them lose a life!".format(player.username, stolenCard.getDeterminerString()), attacker))
 					emitTuples.extend(self.createUpdates("{} stole a card from {}'s hand using El Gringo's ability.".format(player.username, attacker.username)))
-					emitTuples.append(utils.createCardCarouselTuple(player, player == self.playerOrder[0]))
-					emitTuples.append(utils.createCardCarouselTuple(attacker, attacker == self.playerOrder[0]))
+					emitTuples.append(utils.createCardsInHandTuple(player, player == self.playerOrder[0]))
+					emitTuples.append(utils.createCardsInHandTuple(attacker, attacker == self.playerOrder[0]))
 
 					if attacker.character.name == SUZY_LAFAYETTE:
-						emitTuples.extend(self.processSuzyLafayetteAbility(attacker))
+						emitTuples.extend(self.processSuzyLafayetteMollyStarkAbility(attacker))
 
 				else:
 					emitTuples.append(self.createInfoTuple("{} has no cards, so you couldn't use El Gringo's ability to steal anything.".format(attacker.username), player))
 
 		if not self.gameOver:
 			emitTuples.extend(utils.createHealthAnimationTuples(player.username, -damage, self.playerOrder))
-			if stayedAliveWithBirras > 0:
+			if player.isAlive() and requiredBirras > 0:
 				emitTuples.append((SLEEP, 0.5, None))
-				emitTuples.extend(utils.createHealthAnimationTuples(player.username, stayedAliveWithBirras, self.playerOrder))
+				emitTuples.extend(utils.createHealthAnimationTuples(player.username, requiredBirras * (1 if player.character.name != TEQUILA_JOE else 2), self.playerOrder))
 
 		# Only reset the current card once its effects are finished, i.e. once every player has finished reacting to everything.
 		if self.currentCardCanBeReset():
@@ -1386,7 +1447,7 @@ class Gameplay(dict):
 				
 				# There's only 1 player Jesse Jones can draw from, so automatically draw from that player's hand.
 				else:
-					emitTuples.extend(self.processJesseJonesDrawingFromPlayer(username, playersToDrawFrom[0].username, automatic=True))
+					emitTuples.extend(self.processJesseJonesAbility(username, playersToDrawFrom[0].username, automatic=True))
 
 			elif answer == FROM_THE_DECK:
 				cardsDrawn = self.drawCardsForPlayerTurn(player)
@@ -1394,13 +1455,13 @@ class Gameplay(dict):
 				self.drawingToStartTurn = False
 				
 				emitTuples.append(self.createCardsDrawnTuple(player, description, cardsDrawn))
-				emitTuples.append(utils.createCardCarouselTuple(player, True))
+				emitTuples.append(utils.createCardsInHandTuple(player, True))
 				emitTuples.extend(self.getDiscardTuples(self.getTopDiscardCard()))
 				emitTuples.extend(self.createUpdates(DREW_2_CARDS.format(username)))
 
 		elif player.character.name == PEDRO_RAMIREZ:
 			if answer in [FROM_DISCARD, FROM_THE_DECK]:
-				cardsDrawn = self.drawCardsForPlayerTurn(player, extraInfo=('' if answer == FROM_THE_DECK else FROM_DISCARD))
+				cardsDrawn = self.drawCardsForPlayerTurn(player, extraInfo=(None if answer == FROM_THE_DECK else FROM_DISCARD))
 				if answer == FROM_DISCARD:
 					description = "You drew {} from the discard pile and {} from the deck.".format(cardsDrawn[-2].getDeterminerString(), cardsDrawn[-1].getDeterminerString())
 					emitTuples.extend(self.createUpdates("{} drew {} from the discard pile and 1 card from the deck.".format(username, cardsDrawn[-2].getDeterminerString())))
@@ -1411,13 +1472,45 @@ class Gameplay(dict):
 				self.drawingToStartTurn = False
 
 				emitTuples.append(self.createCardsDrawnTuple(player, description, player.cardsInHand[-2:]))
-				emitTuples.append(utils.createCardCarouselTuple(player, True))
+				emitTuples.append(utils.createCardsInHandTuple(player, True))
 				emitTuples.extend(self.getDiscardTuples(self.getTopDiscardCard()))
 
 			else:
 				utils.logError("Option of \"{}\" was selected by {}, which doesn't match any expected options.".format(answer, player.getLogString()))
 				self.drawingToStartTurn = False
 				return []
+
+		elif player.character.name == PAT_BRENNAN:
+			# For deciding what type of draw he'll have.
+			if question == QUESTION_PAT_BRENNAN:
+				if answer == FROM_THE_DECK:
+					cardsDrawn = self.drawCardsForPlayerTurn(player)
+					description = "You drew {} from the deck.".format(utils.convertCardsDrawnToString(cardsDrawn))
+					self.drawingToStartTurn = False
+					
+					emitTuples.append(self.createCardsDrawnTuple(player, description, cardsDrawn))
+					emitTuples.append(utils.createCardsInHandTuple(player, True))
+					emitTuples.extend(self.getDiscardTuples(self.getTopDiscardCard()))
+					emitTuples.extend(self.createUpdates(DREW_2_CARDS.format(username)))
+				
+				else:
+					playersToDrawFrom = self.getPlayersWithCardsInPlay(username)
+					if len(playersToDrawFrom) > 1:
+						emitTuples.append(self.createInfoTuple("Click on the player whose in-play cards you want to draw from.", player))
+						emitTuples.append(self.createClickOnPlayersTuple(player, PAT_BRENNAN_CLICK))
+					
+					# There's only 1 player Pat Brennan can draw from, so automatically draw from that player's in-play cards.
+					else:
+						emitTuples.extend(self.processPatBrennanAbility(player, playersToDrawFrom[0]))
+
+			# For deciding which card to take from the other player.
+			else:
+				targetName = utils.getReverseFormat(QUESTION_PAT_BRENNAN_CARD, question)[0]
+				target = self.players[targetName]
+
+				cardName, value, suit = utils.getCardNameValueSuitFromAnswer(answer)
+				cardChosen = utils.getUniqueItem(lambda card: (cardName, value, suit) == (card.name, card.value, card.suit), target.cardsInPlay)
+				emitTuples.extend(self.processPatBrennanAbility(player, target, card=cardChosen))
 
 		elif player.character.name == LUCKY_DUKE:
 			self.playersWaitingFor.remove(player.username)
@@ -1473,7 +1566,7 @@ class Gameplay(dict):
 			if c != discardedCard:
 				player.addCardToHand(c)
 
-		emitTuples.append(utils.createCardCarouselTuple(player, True))
+		emitTuples.append(utils.createCardsInHandTuple(player, True))
 		emitTuples.extend(self.getDiscardTuples(self.getTopDiscardCard()))
 		emitTuples.extend(self.createUpdates(DREW_2_CARDS.format(username)))
 
@@ -1497,7 +1590,7 @@ class Gameplay(dict):
 			utils.logError("{} played a blurred card in a non-duel even though it's currently his/her turn.".format(username))
 			return []
 
-		if selectedCard.name not in [BANG, MANCATO]:
+		if player.character.name != ELENA_FUENTE and selectedCard.name not in [BANG, MANCATO]:
 			utils.logError("{} responded to the current card ({}) by playing {}.".format(player.getLogString(), self.currentCard.name, selectedCard.name))
 			return []
 
@@ -1513,23 +1606,27 @@ class Gameplay(dict):
 		elif self.currentCard.name in [BANG, GATLING] or (currentPlayer.character.name == CALAMITY_JANET and self.currentCard.name == MANCATO):
 			self.discardCard(player, selectedCard)
 
-			if player.character.name == SUZY_LAFAYETTE:
-				emitTuples.extend(self.processSuzyLafayetteAbility(player))
+			if player.character.name in [SUZY_LAFAYETTE, MOLLY_STARK]:
+				emitTuples.extend(self.processSuzyLafayetteMollyStarkAbility(player))
 			
 			effectiveName = utils.convertRawNameToDisplay(GATLING if self.currentCard.name == GATLING else BANG)
 			if (currentPlayer.character.name == CALAMITY_JANET and self.currentCard.name == MANCATO):
 				effectiveName = MANCATO_AS_BANG
-			effectiveReactionDisplayName = "Mancato" if (player.character.name != CALAMITY_JANET or selectedCard.name != BANG) else BANG_AS_MANCATO
+			
+			if player.character.name in [CALAMITY_JANET, ELENA_FUENTE] and selectedCard.name != MANCATO:
+				effectiveReactionDisplayName = "{} as a Mancato".format(selectedCard.getDeterminerString())
+			else:
+				effectiveReactionDisplayName = "a Mancato"
 
 			if self.specialAbilityCards[SLAB_THE_KILLER] == None:
-				emitTuples.append(self.createInfoTuple("{} played a {} to avoid your {}!".format(player.username, effectiveReactionDisplayName, effectiveName), currentPlayer))
-				emitTuples.extend(self.createUpdates("{} played a {} and avoided {}'s {}.".format(player.username, effectiveReactionDisplayName, currentPlayer.username, effectiveName)))
-				emitTuples.append(utils.createCardCarouselTuple(player, False))
+				emitTuples.append(self.createInfoTuple("{} played {} to avoid your {}!".format(player.username, effectiveReactionDisplayName, effectiveName), currentPlayer))
+				emitTuples.extend(self.createUpdates("{} played {} and avoided {}'s {}.".format(player.username, effectiveReactionDisplayName, currentPlayer.username, effectiveName)))
+				emitTuples.append(utils.createCardsInHandTuple(player, False))
 				emitTuples.extend(self.getDiscardTuples(selectedCard))
 			
 			# Handle a player discarding 1 of multiple Mancatos in response to Slab the Killer here.
 			else:
-				emitTuples.append(utils.createCardCarouselTuple(player, False))
+				emitTuples.append(utils.createCardsInHandTuple(player, False))
 				emitTuples.extend(self.getDiscardTuples(selectedCard))
 
 				self.specialAbilityCards[SLAB_THE_KILLER].append(selectedCard)
@@ -1541,12 +1638,21 @@ class Gameplay(dict):
 				
 				# Has discarded both, so the Bang is fully avoided.
 				else:
-					if all([c.name == MANCATO for c in self.specialAbilityCards[SLAB_THE_KILLER]]):
-						effectiveReactionDisplayName = "2 Mancatos"
-					elif all([c.name == BANG for c in self.specialAbilityCards[SLAB_THE_KILLER]]):
-						effectiveReactionDisplayName = "2 Bangs (as Mancatos)"
+					if len({c.name for c in self.specialAbilityCards[SLAB_THE_KILLER]}) == 1:
+						effectiveReactionDisplayName = "2 {}s".format(self.specialAbilityCards[SLAB_THE_KILLER][0].getDisplayName())
+
+						if self.specialAbilityCards[SLAB_THE_KILLER][0].name != MANCATO:
+							effectiveReactionDisplayName += " (as Mancatos)"
+
 					else:
-						effectiveReactionDisplayName = "a Mancato and a Bang (as a Mancato)"
+						effectiveReactionDisplayNameList = []
+						for c in self.specialAbilityCards[SLAB_THE_KILLER]:
+							if c.name == MANCATO:
+								effectiveReactionDisplayNameList.append("a Mancato")
+							else:
+								effectiveReactionDisplayNameList.append(c.getDeterminerString() + " (as a Mancato)")
+
+						effectiveReactionDisplayName = " and ".join(effectiveReactionDisplayNameList)
 
 					emitTuples.append(self.createInfoTuple("{} played {} to avoid your Bang!".format(player.username, effectiveReactionDisplayName), currentPlayer))
 					emitTuples.extend(self.createUpdates("{} played {} and avoided {}'s Bang.".format(player.username, effectiveReactionDisplayName, currentPlayer.username)))
@@ -1559,18 +1665,48 @@ class Gameplay(dict):
 		elif self.currentCard.name == INDIANS:
 			self.discardCard(player, selectedCard)
 
-			if player.character.name == SUZY_LAFAYETTE:
-				emitTuples.extend(self.processSuzyLafayetteAbility(player))
+			if player.character.name in [SUZY_LAFAYETTE, MOLLY_STARK]:
+				emitTuples.extend(self.processSuzyLafayetteMollyStarkAbility(player))
 
 			effectiveReactionDisplayName = "Bang" if (player.character.name != CALAMITY_JANET or selectedCard.name != MANCATO) else MANCATO_AS_BANG
 			
 			emitTuples.append(self.createInfoTuple("{} played a {} to avoid your Indians!".format(player.username, effectiveReactionDisplayName), currentPlayer))
 			emitTuples.extend(self.createUpdates("{} played a {} and avoided {}'s Indians.".format(player.username, effectiveReactionDisplayName, currentPlayer.username)))
-			emitTuples.append(utils.createCardCarouselTuple(player, False))
+			emitTuples.append(utils.createCardsInHandTuple(player, False))
 			emitTuples.extend(self.getDiscardTuples(selectedCard))
 
 			if self.currentCardCanBeReset():
 				self.currentCard = None
+
+		return emitTuples
+
+	def setupEmporio(self, player, uncleWillCard=None):
+		emitTuples = []
+
+		# Get one card option for each non-eliminated player and show all players the choices.
+		self.emporioOptions = list()
+		for _ in range(len(self.getAlivePlayers())):
+			self.emporioOptions.append(self.drawOneCard())
+
+		if uncleWillCard == None:
+			updateText = "{} played an Emporio!".format(player.username)
+		else:
+			updateText = "{} played {} as an Emporio using Uncle Will's ability!".format(player.username, uncleWillCard.getDeterminerString())
+		
+		emitTuples.extend(self.createUpdates(updateText))
+
+		if len({c.name for c in self.emporioOptions}) > 1:
+			utils.logGameplay("Initial options for Emporio for {}: {}".format([p.username for p in self.getAlivePlayers()], [c.uid for c in self.emporioOptions]))
+			self.playersWaitingFor.append(player.username)
+
+			emporioTuples = utils.createEmporioTuples(self.getAlivePlayers(), self.emporioOptions, player)
+			for t in emporioTuples:
+				self.infoTupleDict[t[2].username] = t
+				emitTuples.extend(emporioTuples)
+
+		else:
+			utils.logGameplay("All initial options for Emporio are the same. Distributing 1 card to each player automatically.")
+			emitTuples.extend(self.processEmporioClausTheSaintAutomatic(self.getAlivePlayers()[0]))
 
 		return emitTuples
 
@@ -1594,14 +1730,14 @@ class Gameplay(dict):
 		player.addCardToHand(card)
 
 		emitTuples = self.createUpdates(PICKED_UP_FROM_EMPORIO.format(username, card.getDeterminerString()))
-		emitTuples.append(utils.createCardCarouselTuple(player, player == self.playerOrder[0]))
+		emitTuples.append(utils.createCardsInHandTuple(player, player == self.playerOrder[0]))
 
 		nextPlayer = self.getAlivePlayers()[self.getAlivePlayers().index(player) + 1] # Should never be possible to get an index error here.
 		
 		if len(self.emporioOptions) == 1:
 			card = self.emporioOptions.pop()
 			nextPlayer.addCardToHand(card)
-			emitTuples.append(utils.createCardCarouselTuple(nextPlayer, nextPlayer == self.playerOrder[0]))
+			emitTuples.append(utils.createCardsInHandTuple(nextPlayer, nextPlayer == self.playerOrder[0]))
 			emitTuples.extend(self.createUpdates(PICKED_UP_FROM_EMPORIO.format(nextPlayer.username, card.getDeterminerString())))
 			emitTuples.append(self.createInfoTuple("You picked up the last Emporio card:", nextPlayer, cards=[card]))
 			emitTuples.extend([self.createInfoTuple("Everyone is done picking an Emporio card.", p) for p in self.playerOrder if p != nextPlayer])
@@ -1611,7 +1747,7 @@ class Gameplay(dict):
 		elif len({card.name for card in self.emporioOptions}) == 1: # Every remaining card is the same, so just distribute them automatically.
 			automaticPlayers = self.getAlivePlayers()[(self.getAlivePlayers().index(player) + 1):]
 			emitTuples.extend([self.createInfoTuple("Everyone is done picking an Emporio card.", p) for p in self.playerOrder if p not in automaticPlayers])
-			emitTuples.extend(self.processEmporioAutomatic(nextPlayer))
+			emitTuples.extend(self.processEmporioClausTheSaintAutomatic(nextPlayer))
 		
 		else:
 			self.playersWaitingFor.append(nextPlayer.username)
@@ -1623,23 +1759,97 @@ class Gameplay(dict):
 
 		return emitTuples
 
-	def processEmporioAutomatic(self, nextPlayer):
+	def processClausTheSaintCardSelection(self, username, uid):
+		utils.logGameplay("Received request from {} to select UID {} for Claus The Saint's ability.".format(username, uid))
+		player = self.players[username]
+
+		if player.character.name != CLAUS_THE_SAINT:
+			utils.logError("{} picked a card for Claus The Saint but his/her character is {}.".format(username, player.character.name))
+			return []
+		elif self.playerOrder[0] != player:
+			utils.logError("Received card selection from {} for Claus The Saint's ability but s/he is not the current player.".format(username))
+			return []
+		
+		card = self.getCardByUid(uid)
+		emitTuples = []
+
+		if card not in self.specialAbilityCards[CLAUS_THE_SAINT]:
+			utils.logError("{} was selected by {} for Claus The Saint's ability, but the options are {}".format(uid, username, [c.uid for c in self.specialAbilityCards[CLAUS_THE_SAINT]]))
+			return []
+
+		lenRemainingOptions = len(self.specialAbilityCards[CLAUS_THE_SAINT])
+		numAlivePlayers = len(self.getAlivePlayers())
+
+		# Claus has picked the first card for himself/herself.
+		if lenRemainingOptions == numAlivePlayers + 1:
+			player.addCardToHand(card)
+			emitTuples.extend(self.createUpdates("{} picked his first card using his ability.".format(username)))
+			emitTuples.append(utils.createCardsInHandTuple(player, True))
+
+		else:
+			# Claus has picked the second card for himself/herself.
+			if lenRemainingOptions == numAlivePlayers:
+				player.addCardToHand(card)
+				emitTuples.extend(self.createUpdates("{} picked his second card using his ability.".format(username)))
+				emitTuples.append(utils.createCardsInHandTuple(player, True))
+
+			# Claus has picked a card for another player.
+			else:
+				playerPickedFor = self.getAlivePlayers()[numAlivePlayers - lenRemainingOptions]
+				playerPickedFor.addCardToHand(card)
+				emitTuples.extend(self.createUpdates(PICKED_FOR_CLAUS_THE_SAINT.format(username, playerPickedFor.username)))
+				emitTuples.append(utils.createCardsInHandTuple(playerPickedFor, False))
+				emitTuples.append(self.createInfoTuple("Claus the Saint gave you {}:".format(card.getDeterminerString()), playerPickedFor, cards=[card]))
+
+		self.specialAbilityCards[CLAUS_THE_SAINT].remove(card)
+		nextPlayerToPickFor = self.getAlivePlayers()[numAlivePlayers - lenRemainingOptions + 1]
+		modalText = "Click on the second card you want to keep for yourself:" if nextPlayerToPickFor == player else "Click on the card you want to give to {}:".format(nextPlayerToPickFor.username)
+		
+		# Every remaining card is the same, so just distribute them automatically.
+		if len({card.name for card in self.specialAbilityCards[CLAUS_THE_SAINT]}) == 1:
+			if nextPlayerToPickFor == player:
+				emitTuples.extend(self.processClausTheSaintCardSelection(player.username, self.specialAbilityCards[CLAUS_THE_SAINT][-1].uid))
+
+			else:
+				emitTuples.extend(self.processEmporioClausTheSaintAutomatic(nextPlayerToPickFor, clausAbility=True))
+				emitTuples.append(self.createCardsDrawnTuple(player, "You drew these 2 cards using your ability:", player.cardsInHand[-2:]))
+			
+				self.currentCard = None
+				self.playersWaitingFor.remove(player.username)
+				self.specialAbilityCards[CLAUS_THE_SAINT] = None
+		
+		# Otherwise, have Claus choose the card for the next player.
+		else:
+			clausTheSaintTuple = utils.createClausTheSaintTuple(player, modalText, self.specialAbilityCards[CLAUS_THE_SAINT])
+			self.infoTupleDict[player.username] = clausTheSaintTuple
+			emitTuples.append(clausTheSaintTuple)
+			utils.logGameplay("Next Claus the Saint tuple: {}".format(clausTheSaintTuple))
+
+		return emitTuples
+
+	def processEmporioClausTheSaintAutomatic(self, nextPlayer, clausAbility=False):
 		emitTuples = []
 		playerIndex = self.getAlivePlayers().index(nextPlayer)
+		listOfCards = self.emporioOptions if not clausAbility else self.specialAbilityCards[CLAUS_THE_SAINT]
 
-		while self.emporioOptions:
-			card = self.emporioOptions.pop()
+		while listOfCards:
+			card = listOfCards.pop()
 			nextPlayer.addCardToHand(card)
 
-			emitTuples.append(utils.createCardCarouselTuple(nextPlayer, nextPlayer == self.playerOrder[0]))
-			emitTuples.extend(self.createUpdates(PICKED_UP_FROM_EMPORIO.format(nextPlayer.username, card.getDeterminerString())))
-			emitTuples.append(self.createInfoTuple("You automatically picked up {} from Emporio.".format(card.getDeterminerString()), nextPlayer, cards=[card]))
-			
-			if self.emporioOptions:
+			infoTextFormat = "You automatically picked up {} from Emporio." if not clausAbility else "Claus the Saint gave you {}:"
+			updateText = PICKED_UP_FROM_EMPORIO.format(nextPlayer.username, card.getDeterminerString()) if not clausAbility \
+							else PICKED_FOR_CLAUS_THE_SAINT.format(self.playerOrder[0].username, nextPlayer.username)
+			emitTuples.append(self.createInfoTuple(infoTextFormat.format(card.getDeterminerString()), nextPlayer, cards=[card]))
+			emitTuples.extend(self.createUpdates(updateText))
+			emitTuples.append(utils.createCardsInHandTuple(nextPlayer, nextPlayer == self.playerOrder[0]))
+
+			if listOfCards:
 				playerIndex += 1
 				nextPlayer = self.getAlivePlayers()[playerIndex]
 
 		self.currentCard = None
+		if clausAbility:
+			self.drawingToStartTurn = False
 
 		return emitTuples
 
@@ -1656,12 +1866,12 @@ class Gameplay(dict):
 		player.cardsInPlay.append(self.currentCard)
 
 		if player.character.name == SUZY_LAFAYETTE:
-			emitTuples.extend(self.processSuzyLafayetteAbility(player))
+			emitTuples.extend(self.processSuzyLafayetteMollyStarkAbility(player))
 
 		if cardIndex == 0 and len(player.cardsInPlay) == 2: # If need be, flip the order of the player's in-play cards to keep them in the same position.
 			player.cardsInPlay = player.cardsInPlay[::-1]
 		
-		emitTuples.append(utils.createCardCarouselTuple(player, True))
+		emitTuples.append(utils.createCardsInHandTuple(player, True))
 		emitTuples.append(utils.createCardsInPlayTuple(player))
 		emitTuples.extend(self.getDiscardTuples(cardToReplace))
 		emitTuples.extend(self.createUpdates("{} discarded {} and put {} in play.".format(player.username, cardToReplace.getDeterminerString(), self.currentCard.getDeterminerString())))
@@ -1674,6 +1884,12 @@ class Gameplay(dict):
 		# If usernameToExclude has the default empty value, this will just check everybody.
 		players = [p for p in self.playerOrder if p.username != usernameToExclude and len(p.cardsInHand) > 0]
 		utils.logGameplay("Players with cards in hand{}: {}".format(" (excluding {})".format(usernameToExclude) if usernameToExclude else "", [p.username for p in players]))
+		return players
+
+	def getPlayersWithCardsInPlay(self, usernameToExclude=''):
+		# If usernameToExclude has the default empty value, this will just check everybody.
+		players = [p for p in self.playerOrder if p.username != usernameToExclude and len(p.cardsInPlay) > 0]
+		utils.logGameplay("Players with cards in play{}: {}".format(" (excluding {})".format(usernameToExclude) if usernameToExclude else "", [p.username for p in players]))
 		return players
 
 	def getQuestionModalWithOpponents(self, player, question, opponents=None):
@@ -1784,7 +2000,6 @@ class Gameplay(dict):
 				emitTuples.append(self.createInfoTuple("{} drew a heart for Barile and avoided your {}!".format(player.username, effectiveDisplayName), currentPlayer))
 				emitTuples.extend(self.createUpdates("{} drew a heart for Barile and avoided {}'s {}.".format(player.username, currentPlayer.username, effectiveDisplayName)))
 
-				# If the card was a Bang and the player avoided it, reset the current card.
 				if self.currentCard.name == BANG:
 					self.currentCard = None
 
@@ -1852,13 +2067,16 @@ class Gameplay(dict):
 		currentCard = self.currentCard
 
 		numRequiredCards = 2 if cardName == BANG and player.character.name == SLAB_THE_KILLER else 1
+		
+		# The target will only not be None if the card is Bang.
 		if target != None:
 			opponents = [target]
 
 		# For Gatling or Indians, order the opponents so that players who will get a question modal get it before any automatic delays occur.
 		# Randomize the order of the automatic opponents to also help make it seem like they responded normally.
 		else:
-			opponents = [p for p in self.getAliveOpponents(player.username) if len(p.getCardTypeFromHand(requiredCard)) >= numRequiredCards or p.countBariles() > 0]
+			opponents = [opp for opp in self.getAliveOpponents(player.username) if len(opp.getCardTypeFromHand(requiredCard)) >= numRequiredCards or
+							(player.character.name != BELLE_STAR and opp.countBariles() > 0)]
 			automaticOpponents = [p for p in self.getAliveOpponents(player.username) if p not in opponents]
 			random.shuffle(automaticOpponents)
 			opponents += automaticOpponents
@@ -1871,8 +2089,12 @@ class Gameplay(dict):
 		for opp in opponents:
 			self.currentCard = currentCard # Resetting this is necessary for the case where more than 1 opponent takes damage.
 
-			# Trying Bariles first.
-			if cardName in [BANG, GATLING] and opp.countBariles() > 0:
+			# Check for Apache Kid first.
+			if opp.character.name == APACHE_KID and cardName in [GATLING, INDIANS] and currentCard.suit == DIAMOND: # Checking for a diamond Bang is done elsewhere.
+				emitTuples.extend(self.createUpdates("{} avoided the {} using Apache Kid's ability.".format(opp.username, currentCard.getDisplayName())))
+
+			# Try Bariles next.
+			elif cardName in [BANG, GATLING] and player.character.name != BELLE_STAR and opp.countBariles() > 0:
 				if opp.character.name == LUCKY_DUKE:
 					emitTuples.append(self.createLuckyDukeTuple(opp))
 					if cardName == BANG: emitTuples.append(utils.createWaitingModalTuple(player, "Waiting for {} (Lucky Duke) to choose a card for \"draw!\"...".format(opp.username)))
@@ -1908,15 +2130,15 @@ class Gameplay(dict):
 		self.drawPile += options # Re-insert these cards into the draw pile because they'll get re-drawn and properly discarded after receiving Lucky Duke's selection.
 		return self.addQuestion(player, QUESTION_LUCKY_DUKE.format(self.currentCard.getDisplayName()), [c.getQuestionString() for c in options])
 
-	def processJesseJonesDrawingFromPlayer(self, username, opponentName, automatic=False):
+	def processJesseJonesAbility(self, username, opponentName, automatic=False):
 		emitTuples = []
 		player = self.players[username]
 		opponent = self.players[opponentName]
 		
 		if not opponent.isAlive():
-			return [self.createInfoTuple("{} isn't in the game anymore!".format(opponentName), player)]
+			return [self.createInfoTuple("{} isn't in the game anymore! Choose someone else.".format(opponentName), player)]
 		elif len(opponent.cardsInHand) == 0:
-			return [self.createInfoTuple("{} doesn't have any cards to draw from!".format(opponentName), player)]
+			return [self.createInfoTuple("{} doesn't have any cards to draw from! Choose someone else.".format(opponentName), player)]
 		elif opponentName == username:
 			return []
 
@@ -1926,11 +2148,11 @@ class Gameplay(dict):
 		self.drawingToStartTurn = False
 
 		if opponent.character.name == SUZY_LAFAYETTE:
-			emitTuples.extend(self.processSuzyLafayetteAbility(opponent))
+			emitTuples.extend(self.processSuzyLafayetteMollyStarkAbility(opponent))
 		
 		emitTuples.append(self.createCardsDrawnTuple(player, description, cardsDrawn))
-		emitTuples.append(utils.createCardCarouselTuple(player, True))
-		emitTuples.append(utils.createCardCarouselTuple(opponent, False))
+		emitTuples.append(utils.createCardsInHandTuple(player, True))
+		emitTuples.append(utils.createCardsInHandTuple(opponent, False))
 		emitTuples.extend(self.getDiscardTuples(self.getTopDiscardCard()))
 		emitTuples.append(self.createInfoTuple("{} drew {} from your hand using Jesse Jones's ability!".format(player.username, stolenCard.getDeterminerString()), opponent))
 		emitTuples.extend(self.createUpdates("{} drew a card from {}'s hand using Jesse Jones's ability.".format(player.username, opponentName)))
@@ -1950,60 +2172,91 @@ class Gameplay(dict):
 	def useSpecialAbility(self, username):
 		player = self.players[username]
 
-		if player.character.name == SID_KETCHUM:
-			return self.processSidKetchumAbility(player)
+
+
+		if player.character.name == SID_KETCHUM or (player == self.playerOrder[0] and player.character.name == DOC_HOLLYDAY):
+			return self.processSidKetchumDocHollydayAbility(player)
+
+		elif player.character.name == CHUCK_WENGAM:
+			return self.processChuckWengamAbility(player)
+
+		elif player.character.name == JOSE_DELGADO:
+			return self.processJoseDelgadoAbility(player)
+
+		elif player.character.name == UNCLE_WILL:
+			return self.processUncleWillAbility(player)
+			
 		else:
 			utils.logGameplay("Received request from {} to use special ability, but it's not applicable.".format(player.getLogString()))
 			return []
 
-	def processSidKetchumAbility(self, player):
-		utils.logGameplay("Processing Sid Ketchum's ability for {}.".format(player.getLogString()))
+	def processSidKetchumDocHollydayAbility(self, player):
+		utils.logGameplay("Processing {}'s ability for {}.".format(player.character.name, player.getLogString()))
 
 		emitTuples = []
 
 		if player.username in self.unansweredQuestions:
 			return []
 
+		elif player.character.name not in [SID_KETCHUM, DOC_HOLLYDAY]:
+			utils.logError("{} is trying to discard cards for their special ability but shouldn't be able to.".format(player.getLogString()))
+			return []
+
 		elif player == self.playerOrder[0] and self.discardingCards:
 			return [self.createInfoTuple("You can't use your ability right now.", player)]
 
-		elif player.lives == player.lifeLimit:
+		elif player.character.name == SID_KETCHUM and player.lives == player.lifeLimit:
 			return [self.createInfoTuple(ALREADY_MAX_LIVES, player)]
+
+		elif player.character.name == DOC_HOLLYDAY and self.specialAbilityCounter[DOC_HOLLYDAY] >= 1:
+			return [self.createInfoTuple("You've already used your ability this turn!", player)]
 		
 		elif len(player.cardsInHand) < 2:
 			return [self.createInfoTuple("You don't have enough cards to use your special ability right now.", player)]
 
 		elif self.currentCard != None:
-			return [self.createInfoTuple("Wait until {}'s {} is finished before using your ability.".format(self.playerOrder[0].username, self.currentCard.getDisplayName()), player)]
+			return [self.getWaitingForCurrentCardTuple(player)]
 
-		elif self.specialAbilityCards[SID_KETCHUM] != None or len(player.cardsInHand) == 2:
-			if self.specialAbilityCards[SID_KETCHUM] != None:
-				if len(self.specialAbilityCards[SID_KETCHUM]) != 2:
-					utils.logError("An invalid number of cards ({}) was given for {} to use his special ability.".format(self.specialAbilityCards[SID_KETCHUM], player.getLogString()))
+		elif self.specialAbilityCards[player.character.name] != None or len(player.cardsInHand) == 2:
+			if self.specialAbilityCards[player.character.name] != None:
+				if len(self.specialAbilityCards[player.character.name]) != 2:
+					utils.logError("An invalid number of cards ({}) was given for {} to use his special ability.".format(self.specialAbilityCards[player.character.name], player.getLogString()))
 					return []
-				if not all([c in player.cardsInHand for c in self.specialAbilityCards[SID_KETCHUM]]):
-					utils.logError("The cards {} were given for {} to use his special ability, but at least 1 doesn't match his current hand ({}).".format(self.specialAbilityCards[SID_KETCHUM], player.getLogString(), player.cardsInHand))
+				if not all([c in player.cardsInHand for c in self.specialAbilityCards[player.character.name]]):
+					utils.logError("The cards {} were given for {} to use his special ability, but at least 1 doesn't match his current hand ({}).".format(self.specialAbilityCards[player.character.name], player.getLogString(), player.cardsInHand))
 					return []
 
-			for c in list(self.specialAbilityCards[SID_KETCHUM] if self.specialAbilityCards[SID_KETCHUM] != None else player.cardsInHand):
+			for c in list(self.specialAbilityCards[player.character.name] if self.specialAbilityCards[player.character.name] != None else player.cardsInHand):
 				self.discardCard(player, c)
-			
-			player.gainOneLife()
-			self.specialAbilityCards[SID_KETCHUM] = None
+
+			if player.username in self.clickingOnCardSet:
+				self.clickingOnCardSet.remove(player.username)
 			if player.username in self.playersWaitingFor:
 				self.playersWaitingFor.remove(player.username)
 
-			emitTuples.append(self.createInfoTuple("You've discarded 2 cards and gained a life.", player))
-			emitTuples.extend(self.createUpdates("{} used Sid Ketchum's ability to discard 2 cards and gain a life.".format(player.username)))
-			emitTuples.append(utils.createCardCarouselTuple(player, player == self.playerOrder[0]))
+			emitTuples.append(utils.createCardsInHandTuple(player, player == self.playerOrder[0]))
 			emitTuples.extend(self.getDiscardTuples(self.getTopDiscardCard()))
-			emitTuples.extend(utils.createHealthAnimationTuples(player.username, 1, self.playerOrder))
+			
+			if player.character.name == SID_KETCHUM:
+				self.specialAbilityCards[SID_KETCHUM] = None
+				player.gainOneLife()
+				emitTuples.append(self.createInfoTuple("You've discarded 2 cards and gained a life.", player))
+				emitTuples.extend(self.createUpdates("{} used Sid Ketchum's ability to discard 2 cards and gain a life.".format(player.username)))
+				emitTuples.extend(utils.createHealthAnimationTuples(player.username, 1, self.playerOrder))
+
+			elif player.character.name == DOC_HOLLYDAY:
+				emitTuples.append(self.createInfoTuple("Click on the player you want to shoot.", player))
+				emitTuples.extend(self.createUpdates("{} used Doc Hollyday's ability to discard 2 cards for a Bang.".format(player.username)))
+				emitTuples.append(self.createClickOnPlayersTuple(player, DOC_HOLLYDAY_CLICK))
+
+				self.currentCard = self.createFakeCard(BANG)
 
 		# In this case, the player can discard 2 cards but needs to choose which 2 to discard.
 		else:
-			self.specialAbilityCards[SID_KETCHUM] = [] # Change this from None to indicate that the process of using the ability is ongoing.
+			self.clickingOnCardSet.add(player.username)
+			self.specialAbilityCards[player.character.name] = [] # Change this from None to indicate that the process of using the ability is ongoing.
 			self.playersWaitingFor.append(player.username)
-			emitTuples.append(self.createInfoTuple(SID_KETCHUM_INFO, player))
+			emitTuples.append(self.createInfoTuple(SID_KETCHUM_INFO if player.character.name == SID_KETCHUM else DOC_HOLLYDAY_INFO, player))
 			emitTuples.extend(utils.createDiscardClickTuples(player))
 
 		utils.logGameplay("Returning the following the tuples for {} for Sid Ketchum's ability: {}".format(player.getLogString(), emitTuples))
@@ -2018,33 +2271,168 @@ class Gameplay(dict):
 
 		self.playersWaitingFor.append(player.username)
 
-		# If the player isn't Calamity Janet, or if Calamity only has 1 type of Bang/Mancato, just automatically play the required cards.
-		if player.character.name != CALAMITY_JANET or len(set([c.name for c in mancatosInHand])) == 1:
+		# If the player can't choose, just automatically play the required cards.
+		if not self.playerCanChooseResponseCard(player, MANCATO, mancatosInHand):
 			self.processBlurCardSelection(player.username, mancatosInHand[0].uid) # Don't bother emitting the intermediate results.
-
 			emitTuples.extend(self.processBlurCardSelection(player.username, mancatosInHand[1].uid))
 
-		# Otherwise, blur the non-Mancatos for Calamity and have him/her choose which ones to use.
+		# Otherwise, blur any applicable cards and have the player choose which ones to use.
 		else:
 			emitTuples.extend(utils.createCardBlurTuples(player, MANCATO, msg=CLICK_ON_CARD.format("first Mancato")))
 
 		utils.logGameplay("Returning the following the tuples for {} for Slab the Killer's ability: {}".format(player.getLogString(), emitTuples))
 		return emitTuples
 
-	def processSuzyLafayetteAbility(self, player):
+	def processSuzyLafayetteMollyStarkAbility(self, player):
 		emitTuples = []
 
 		if player.character.name == SUZY_LAFAYETTE and len(player.cardsInHand) == 0:
 			utils.logGameplay("Processing Suzy Lafayette's ability for {}.".format(player.getLogString()))
 			self.drawCardsForPlayer(player)
 
-			emitTuples.append(utils.createCardCarouselTuple(player, player == self.playerOrder[0]))
+			emitTuples.append(utils.createCardsInHandTuple(player, player == self.playerOrder[0]))
 			emitTuples.extend(self.getDiscardTuples(self.getTopDiscardCard()))
 			emitTuples.append(self.createInfoTuple("You drew a card using Suzy Lafayette's ability!", player))
 			emitTuples.extend(self.createUpdates("{} drew a card using Suzy Lafayette's ability.".format(player.username)))
 
 			utils.logGameplay("Returning the following the tuples for {} for Suzy Lafayette's ability: {}".format(player.getLogString(), emitTuples))
+
+		elif player.character.name == MOLLY_STARK:
+			if player != self.playerOrder[0]: # Molly Stark's ability only applies out-of-turn.
+				numCardsToDraw = 1 if self.specialAbilityCounter[MOLLY_STARK] == 0 else self.specialAbilityCounter[MOLLY_STARK] # The counter will be used to track Bangs played in a Duel.
+				cardsDrawnString = "a card" if numCardsToDraw == 1 else "{} cards".format(numCardsToDraw)
+				self.drawCardsForPlayer(player, numCardsToDraw)
+
+				emitTuples.append(self.createCardsDrawnTuple(player, "You drew {} using your ability:".format(cardsDrawnString), player.cardsInHand[-numCardsToDraw:]))
+				emitTuples.append(utils.createCardsInHandTuple(player, False))
+				emitTuples.extend(self.createUpdates("{} drew {} using Molly Stark's ability.".format(player.username, cardsDrawnString)))
+
+			self.specialAbilityCounter[MOLLY_STARK] = 0
 		
+		return emitTuples
+
+	def processJohnnyKischAbility(self, player, card):
+		emitTuples = []
+		forcedDiscard = False
+		
+		for opp in self.getAliveOpponents(player.username):
+			opponentCard = utils.getUniqueItem(lambda c: c.name == card.name, opp.cardsInPlay)
+			if opponentCard != None:
+				forcedDiscard = True
+				self.discardCard(opp, opponentCard)
+
+				emitTuples.append(utils.createCardsInPlayTuple(opp))
+				emitTuples.append(self.createInfoTuple("You had to discard your {} because {} put one in play.".format(card.getDisplayName(), player.username), opp))
+				emitTuples.extend(self.createUpdates("{} was forced to discard their {}.".format(opp.username, card.getDisplayName())))
+
+		if forcedDiscard:
+			emitTuples.extend(self.getDiscardTuples(self.getTopDiscardCard()))
+
+		return emitTuples
+
+	def processChuckWengamAbility(self, player):
+		emitTuples = []
+
+		if player != self.playerOrder[0]:
+			emitTuples.append(self.createInfoTuple("You can't use your ability unless it's your turn!", player))
+
+		elif self.currentCard != None:
+			return [self.getWaitingForCurrentCardTuple(player)]
+
+		elif player.lives == 1:
+			emitTuples.append(self.createInfoTuple("You can't use your ability when you only have 1 life left!", player))
+
+		else:
+			player.loseOneLife()
+			self.drawCardsForPlayer(player, 2)
+
+			emitTuples.extend(utils.createHealthAnimationTuples(player.username, -1, self.playerOrder))
+			emitTuples.append(self.createCardsDrawnTuple(player, "You drew 2 cards using your ability:", player.cardsInHand[-2:]))
+			emitTuples.append(utils.createCardsInHandTuple(player, True))
+			emitTuples.extend(self.createUpdates("{} lost 1 life and drew 2 cards using Chuck Wengam's ability.".format(player.username)))
+
+		return emitTuples
+
+	def processJoseDelgadoAbility(self, player, card=None):
+		if player != self.playerOrder[0]:
+			return [self.createInfoTuple("You can't use your ability unless it's your turn!", player)]
+
+		elif self.currentCard != None:
+			return [self.getWaitingForCurrentCardTuple(player)]
+
+		elif self.specialAbilityCounter[JOSE_DELGADO] == 2:
+			return [self.createInfoTuple("You've already used your ability twice this turn!", player)]
+
+		emitTuples = []
+		automatic = False
+		blueCardsInHand = [c for c in player.cardsInHand if c.cardtype in [BLUE_CARD, GUN_CARD, SPECIAL_CARD]]
+
+		if card == None and len(blueCardsInHand) == 1:
+			card = blueCardsInHand[0]
+			automatic = True
+
+		if card == None:
+			if len(blueCardsInHand) == 0:
+				return [self.createInfoTuple("You don't have any blue cards in your hand!", player)]
+
+			# 2+ blue cards in hand.
+			else:
+				self.clickingOnCardSet.add(player.username)
+				return utils.createAbilityCardClickTuples(player, JOSE_DELGADO_CLICK)
+
+		else:
+			if card.cardtype not in [BLUE_CARD, GUN_CARD]:
+				return [self.createInfoTuple("That's not a blue card!", player)]
+
+			else:
+				if player.username in self.clickingOnCardSet:						
+					self.clickingOnCardSet.remove(player.username)
+				self.specialAbilityCounter[JOSE_DELGADO] += 1
+				self.discardCard(player, card)
+				self.drawCardsForPlayer(player, 2)
+
+				emitTuples.extend(self.getDiscardTuples(self.getTopDiscardCard()))
+				emitTuples.append(utils.createCardsInHandTuple(player, True))
+				emitTuples.append(self.createCardsDrawnTuple(player, "You {}drew 2 cards using your ability:".format("automatically " if automatic else ""), player.cardsInHand[-2:]))
+				emitTuples.extend(self.createUpdates("{} drew 2 cards using Jose Delgado's ability.".format(player.username)))
+
+		return emitTuples
+
+	def processUncleWillAbility(self, player, card=None):
+		if player != self.playerOrder[0]:
+			return [self.createInfoTuple("You can't use your ability unless it's your turn!", player)]
+
+		elif self.currentCard != None:
+			return [self.getWaitingForCurrentCardTuple(player)]
+
+		elif self.specialAbilityCounter[UNCLE_WILL] == 1:
+			return [self.createInfoTuple("You've already used your ability this turn!", player)]
+
+		emitTuples = []
+		automatic = False
+
+		if card == None and len(player.cardsInHand) == 1:
+			card = player.cardsInHand[0]
+			automatic = True
+
+		if card == None:
+			if len(player.cardsInHand) == 0:
+				return [self.createInfoTuple("You don't have any cards in your hand!", player)]
+
+			else:
+				self.clickingOnCardSet.add(player.username)
+				return utils.createAbilityCardClickTuples(player, UNCLE_WILL_CLICK)
+
+		else:
+			if player.username in self.clickingOnCardSet:			
+				self.clickingOnCardSet.remove(player.username)
+			self.specialAbilityCounter[UNCLE_WILL] = 1
+			self.discardCard(player, card)
+
+			emitTuples.extend(self.getDiscardTuples(self.getTopDiscardCard()))
+			emitTuples.extend(self.setupEmporio(player, uncleWillCard=card))
+			emitTuples.append(utils.createCardsInHandTuple(player, True))
+
 		return emitTuples
 
 	def createClickOnPlayersTuple(self, player, clickType, lastCardUid=0):
@@ -2052,7 +2440,6 @@ class Gameplay(dict):
 		return utils.createClickOnPlayersTuple(player, clickType)
 
 	def processPlayerClickedOn(self, username, targetName, clickType):
-		emitTuples = []
 		player = self.players[username]
 		target = self.players[targetName]
 
@@ -2063,9 +2450,26 @@ class Gameplay(dict):
 			utils.logError("{} did an on-player click ({} against {}), but the current player is {}.".format(player.getLogString(), clickType, targetName, self.playerOrder[0].getLogString()))
 			return []
 
+		
 		if clickType == JESSE_JONES_CLICK:
 			del self.clickingOnPlayerDict[player.username]
-			return self.processJesseJonesDrawingFromPlayer(username, targetName)
+			return self.processJesseJonesAbility(username, targetName)
+		
+		elif clickType == DOC_HOLLYDAY_CLICK:
+			response = self.validateTargetChoice(player, target)
+			if response == OK_MSG:
+				del self.clickingOnPlayerDict[player.username]
+				self.specialAbilityCards[player.character.name] = None
+				self.specialAbilityCounter[DOC_HOLLYDAY] = 1
+
+				return self.processBangGatlingIndians(player, BANG, target)
+			
+			else:
+				return [self.createInfoTuple(response, player, header="Invalid Target")]
+		
+		elif clickType == PAT_BRENNAN_CLICK:
+			return self.processPatBrennanAbility(player, target)
+		
 		else:
 			response = self.validateTargetChoice(player, target)
 			if response == OK_MSG:
@@ -2074,6 +2478,150 @@ class Gameplay(dict):
 			else:
 				return [self.createInfoTuple(response, player, header="Invalid Target")] # Don't re-open the question modal so that the player can play another card if s/he wants to.
 
+	def processAbilityCardClickedOn(self, username, uid, clickType):
+		emitTuples = []
+		player = self.players[username]
+		card = self.getCardByUid(uid)
+
+		if clickType == JOSE_DELGADO_CLICK:
+			emitTuples.extend(self.processJoseDelgadoAbility(player, card=card))
+
+		elif clickType == UNCLE_WILL_CLICK:
+			emitTuples.extend(self.processUncleWillAbility(player, card=card))
+
+		return emitTuples
+
 	def getPlayerList(self, username):
+		player = self.players[username]
+
 		waitingFor = self.playersWaitingFor if (self.currentCard != None and self.currentCard.name in [GATLING, INDIANS]) else list()
-		return [utils.createPlayerInfoListTuple(self.playerOrder, self.players[username], playersWaitingFor=waitingFor)]
+		emitTuples = [utils.createPlayerInfoListTuple(self.playerOrder, player, playersWaitingFor=waitingFor)]
+
+		if username in self.clickingOnPlayerDict:
+			clickType, lastCardUid = self.clickingOnPlayerDict[username]
+			emitTuples.append(utils.createClickOnPlayersTuple(player, clickType, lastCardUid=lastCardUid))
+
+		return emitTuples
+
+	def playerIsDiscardingForAbility(self, player):
+		if player.character.name in [SID_KETCHUM, DOC_HOLLYDAY]:
+			return self.specialAbilityCards[player.character.name] != None
+		
+		return False
+
+	def processPlayerDiscardingForAbility(self, player, card):
+		emitTuples = []
+
+		self.specialAbilityCards[player.character.name].append(card)
+
+		if len(self.specialAbilityCards[player.character.name]) == 1:
+			# Temporarily remove the card from the hand to show an updated hand in the UI.
+			player.getRidOfCard(card)
+
+			emitTuples.append(utils.createCardsInHandTuple(player, player == self.playerOrder[0]))
+
+			player.cardsInHand.append(card) # Re-insert the card because it properly gets discarded later.
+
+			emitTuples.extend(utils.createDiscardClickTuples(player))
+
+		else: # Both cards have been selected, so actually discard them and gain the life.
+			emitTuples = self.processSidKetchumDocHollydayAbility(player)
+
+		return emitTuples
+
+	def playerCanChooseResponseCard(self, player, requiredCardName, requiredCardsInHand):
+		if player.character.name == CALAMITY_JANET or (requiredCardName == MANCATO and player.character.name == ELENA_FUENTE):
+			return len(set([c.name for c in requiredCardsInHand])) > 1
+
+		return False
+
+	# Check for Vulture Same, Greg Digger, and Herb Hunter among the alive players and use their abilities if applicable.
+	def processPlayerEliminatedAbilities(self, attacker, eliminatedPlayer):
+		emitTuples = []
+
+		vultureSam = utils.getUniqueItem(lambda p: p.character.name == VULTURE_SAM, self.getAlivePlayers())
+		vultureSamSheriffException = vultureSam != None and vultureSam == attacker and vultureSam.role == SHERIFF and eliminatedPlayer.role == VICE
+		if not vultureSamSheriffException and vultureSam != None and vultureSam != eliminatedPlayer:
+			if len(eliminatedPlayer.cardsInHand + eliminatedPlayer.getCardsOnTable()) > 0:
+				vultureSam.cardsInHand.extend(eliminatedPlayer.cardsInHand + eliminatedPlayer.getCardsOnTable())
+
+				eliminatedPlayer.cardsInHand = []
+				eliminatedPlayer.cardsInPlay = []
+				eliminatedPlayer.specialCards = []
+				
+				emitTuples.append((SLEEP, 0.5, None))
+				emitTuples.append(self.createInfoTuple("You got all of {}'s cards because they were eliminated!".format(eliminatedPlayer.username), vultureSam))
+				emitTuples.extend(self.createUpdates("{} got all of {}'s cards using Vulture Sam's ability.".format(vultureSam.username, eliminatedPlayer.username)))
+				emitTuples.append(utils.createCardsInHandTuple(vultureSam, vultureSam == self.playerOrder[0]))
+
+			else:
+				emitTuples.append(self.createInfoTuple("You couldn't use Vulture Sam's ability because {} had no cards.".format(eliminatedPlayer.username), vultureSam))
+
+		gregDigger = utils.getUniqueItem(lambda p: p.character.name == GREG_DIGGER, self.getAlivePlayers())
+		if gregDigger != None and gregDigger != eliminatedPlayer:
+			livesGained = min(gregDigger.lifeLimit - gregDigger.lives, 2)
+
+			if livesGained > 0:
+				lifeString = "a life" if livesGained == 1 else "2 lives"
+				for _ in range(livesGained):
+					gregDigger.gainOneLife()
+
+				emitTuples.extend(utils.createHealthAnimationTuples(gregDigger.username, livesGained, self.playerOrder))
+				emitTuples.extend(self.createUpdates("{} gained {} using Greg Digger's ability.".format(gregDigger.username, lifeString)))
+				emitTuples.append(self.createInfoTuple("You gained {} because {} was eliminated.".format(lifeString, eliminatedPlayer.username), gregDigger))
+
+		herbHunter = utils.getUniqueItem(lambda p: p.character.name == HERB_HUNTER, self.getAlivePlayers())
+		if herbHunter != None and herbHunter != eliminatedPlayer:
+			self.drawCardsForPlayer(herbHunter, 2)
+
+			emitTuples.append(self.createCardsDrawnTuple(herbHunter, "You drew 2 cards because {} was eliminated:".format(eliminatedPlayer.username), herbHunter.cardsInHand[-2:]))
+			emitTuples.append(utils.createCardsInHandTuple(herbHunter, herbHunter == self.playerOrder[0]))
+			emitTuples.extend(self.createUpdates("{} drew 2 cards using Herb Hunter's ability.".format(herbHunter.username)))
+
+		return emitTuples
+
+	def processPatBrennanAbility(self, player, target, card=None):
+		emitTuples = []
+		automatic = False
+
+		if card == None and len(target.cardsInPlay) == 1:
+			card = target.cardsInPlay[0]
+			automatic = True
+			if player.username in self.clickingOnPlayerDict:
+				del self.clickingOnPlayerDict[player.username]
+
+		if card == None:
+			if not target.isAlive():
+				emitTuples.append(self.createInfoTuple("{} isn't in the game anymore! Choose someone else.".format(target.username), player))
+
+			elif len(target.cardsInPlay) == 0:
+				emitTuples.append(self.createInfoTuple("{} doesn't have any in-play cards to draw from! Choose someone else.".format(target.username), player))
+			
+			# If the target has 2 in-play cards.
+			else:
+				if player.username in self.clickingOnPlayerDict:
+					del self.clickingOnPlayerDict[player.username]
+
+				emitTuples.append(self.addQuestion(player, QUESTION_PAT_BRENNAN_CARD.format(target.username), [c.getQuestionString() for c in target.cardsInPlay]))
+		
+		else:
+			player.cardsInHand.append(card)
+			target.getRidOfCard(card)
+			self.drawingToStartTurn = False
+			description = "You {}drew {}'s {}.".format("automatically " if automatic else "", target.username, card.getDisplayName())
+
+			emitTuples.append(self.createCardsDrawnTuple(player, description, [card]))
+			emitTuples.append(utils.createCardsInHandTuple(player, True))
+			emitTuples.append(utils.createCardsInPlayTuple(target))
+			emitTuples.append(self.createInfoTuple("{} took the {} from your in-play cards using Pat Brennan's ability!".format(player.username, card.getDisplayName()), target))
+			emitTuples.extend(self.createUpdates("{} took the {} from {}'s in-play cards using Pat Brennan's ability.".format(player.username, card.getDisplayName(), target.username)))
+
+		return emitTuples
+
+	def createFakeCard(self, cardName, value="A", suit=CLUB):
+		exampleCard = [c for c in self.allCards if c.name == cardName][0]
+		return Card(cardName, -1, exampleCard.cardtype, exampleCard.requiresTarget, "{} {}".format(value, suit))
+
+	def getWaitingForCurrentCardTuple(self, player):
+		usernameString = (self.playerOrder[0].username + "'s") if player != self.playerOrder[0] else "your"
+		return self.createInfoTuple("Wait until {} {} is finished before using your ability.".format(usernameString, self.currentCard.getDisplayName()), player)

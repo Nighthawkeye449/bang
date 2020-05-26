@@ -81,7 +81,7 @@ def deleteGame(lobbyNumber):
 	conn = getDatabaseConnection()
 	cur = conn.cursor()
 
-	sql = "DELETE * FROM saved_games WHERE lobbyNumber = {}".format(lobbyNumber)
+	sql = "DELETE FROM saved_games WHERE lobbyNumber = {}".format(lobbyNumber)
 	cur.execute(sql)
 	conn.commit()
 	cur.close()
@@ -147,7 +147,7 @@ def loadCards():
 def loadCharacters(includeExtras=False):
 	filePaths = [getLocalFilePath("static/json/characters.json")]
 	if includeExtras:
-		filePaths.append(getLocalFilePath("static/json/characters_extra.json"))
+		filePaths.append(getLocalFilePath("static/json/extra_characters.json"))
 
 	characterList = list()
 	for filePath in filePaths:
@@ -197,10 +197,14 @@ def convertCardSuitResponseToRaw(answer):
 	return (convertDisplayNameToRaw(answer[:parenIndex - 1]), answer[parenIndex+1:][:-1])
 
 def convertCardsDrawnToString(cards):
-	if len(cards) == 2:
+	if len(cards) == 1:
+		return cards[0].getDeterminerString()
+	elif len(cards) == 2:
 		return "{} and {}".format(*[c.getDeterminerString() for c in cards])
-	else:
+	elif len(cards) == 3:
 		return "{}, {}, and {}".format(*[c.getDeterminerString() for c in cards])
+	else:
+		return "{} cards".format(len(cards))
 
 def getDeterminerString(name):
 	return "{} {}".format("an" if isVowel(name[0]) else "a", convertRawNameToDisplay(name))
@@ -227,6 +231,10 @@ def getPlayerInfoListTemplate(playerInfoList, playersWaitingFor=list()):
 
 def createClickOnPlayersTuple(player, clickType, lastCardUid=0):
 	return (constants.CREATE_CLICK_ON_PLAYERS, {'clickType': clickType, 'lastCardUid': lastCardUid}, player)
+
+def createAbilityCardClickTuples(player, clickType):
+	return [createInfoTuple("Click on the card in your hand you want to use for your ability.", player),
+			(constants.SPECIAL_ABILITY_CARD_CLICK, {'clickType': clickType}, player)]
 
 def createCardsDrawnTuple(player, description, cardsDrawn, startingTurn=True):
 	cardsDrawnImagesTemplate = Markup(render_template('/modals/card_images.html', cards=cardsDrawn))
@@ -274,6 +282,8 @@ def createUpdateTupleForPlayer(updateString, player):
 def createCardBlurTuples(player, cardName, msg=None):
 	if player.character.name == constants.CALAMITY_JANET and cardName in [constants.BANG, constants.MANCATO]:
 		cardNames = [constants.BANG, constants.MANCATO]
+	elif player.character.name == constants.ELENA_FUENTE and cardName == constants.MANCATO:
+		cardNames = [c.name for c in player.cardsInHand]
 	else:
 		cardNames = [cardName]
 
@@ -288,7 +298,7 @@ def createEmporioTuples(alivePlayers, cardsLeft, playerPicking):
 
 	for p in alivePlayers:
 		if p == playerPicking:
-			cardImagesTemplate = Markup(render_template('/modals/card_images.html', cards=cardsLeft, clickFunction="pickEmporioCard"))
+			cardImagesTemplate = Markup(render_template('/modals/card_images.html', cards=cardsLeft, clickFunction=constants.EMPORIO_CLICK))
 			text = "Click on a card to choose it:"
 		else:
 			cardImagesTemplate = Markup(render_template('/modals/card_images.html', cards=cardsLeft))
@@ -300,6 +310,12 @@ def createEmporioTuples(alivePlayers, cardsLeft, playerPicking):
 
 	return emitTuples
 
+def createClausTheSaintTuple(player, text, cardsLeft):
+	cardImagesTemplate = Markup(render_template('/modals/card_images.html', cards=cardsLeft, clickFunction=constants.CLAUS_THE_SAINT_CLICK))
+	data = {'html': render_template('/modals/unclosable.html', text=text, header="Claus The Saint", cardsTemplate=cardImagesTemplate, playerIsDead=False)}		
+
+	return createEmitTuples(constants.SHOW_INFO_MODAL, dict(data), recipients=[player])[0]
+
 def createKitCarlsonTuple(player, cardChoices):
 	cardImagesTemplate = Markup(render_template('/modals/card_images.html', cards=cardChoices, clickFunction="pickKitCarlsonCard"))
 	text = "Kit Carlson, click the card you want to put back on the draw pile:"
@@ -308,7 +324,7 @@ def createKitCarlsonTuple(player, cardChoices):
 	return createEmitTuples(constants.SHOW_INFO_MODAL, dict(data), recipients=[player])[0]
 
 # Tuple to update a given player's cards-in-hand carousel.
-def createCardCarouselTuple(player, isCurrentPlayer):
+def createCardsInHandTuple(player, isCurrentPlayer):
 	return createEmitTuples(constants.UPDATE_CARD_HAND, {'cardInfo': player.getCardInfo(isCurrentPlayer)}, recipients=[player])[0]
 
 # Tuple to update the images for a player's cards in play.

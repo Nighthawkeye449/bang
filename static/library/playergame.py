@@ -65,6 +65,9 @@ class PlayerGame(dict):
 		if self.character.name == CALAMITY_JANET and cardName in [BANG, MANCATO]:
 			cards += [c for c in self.cardsInHand if c.name == (MANCATO if cardName == BANG else BANG)]
 
+		if self.character.name == ELENA_FUENTE and cardName == MANCATO:
+			cards = list(self.cardsInHand)
+
 		return cards
 
 	def isAlive(self):
@@ -114,7 +117,8 @@ class PlayerGame(dict):
 		return self.cardsInPlay + self.specialCards
 
 	def countExcessCards(self):
-		excess = max(len(self.cardsInHand) - self.lives, 0)
+		cardLimit = self.lives if self.character.name != SEAN_MALLORY else 10
+		excess = max(len(self.cardsInHand) - cardLimit, 0)
 		utils.logPlayer("Counting excess cards for {} (cards: {}) (lives: {}): {}".format(self.getLogString(), [c.name for c in self.cardsInHand], self.lives, excess))
 		return excess
 

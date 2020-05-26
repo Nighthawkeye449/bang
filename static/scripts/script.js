@@ -23,6 +23,7 @@ var keysPressed = {};
 var healthAnimationCounter = 0;
 var lastCardUid = -1;
 var previousSocketTime = new Date().getTime();
+var currentCardHandInfo = [];
 
 $(document).ready(function(){
 
@@ -35,7 +36,7 @@ $(document).ready(function(){
 
 	// Connect to the socket server.
 	if (username.length > 0) {
-		socket = io.connect('http://' + document.domain + ':' + location.port + '/', { forceNew: true, transports: ['polling'] });
+		socket = io.connect('http://' + document.domain + ':' + location.port + '/', { forceNew: true, transports: ['websocket'] });
 		socket.emit('connected', username);
 
 		setInterval(function() { socket.emit('connected', username); }, 10000);
@@ -270,6 +271,7 @@ $(document).ready(function(){
 		});
 
 		socket.on('update_card_hand', function(data) {
+			currentCardHandInfo = data.cardInfo;
 			createCardHand(data.cardInfo);
 		});
 
@@ -361,6 +363,14 @@ $(document).ready(function(){
 		socket.on('set_player_opacity', function(data) {
 			setPlayerOpacity(data.currentUsername);
 		});
+
+		socket.on('doc_hollyday_ability', function(data) {
+			setPlayerClicks("doc_hollyday_click");
+		});
+
+		socket.on('special_ability_card_click', function(data) {
+			setAbilityCardClicks(data.clickType);
+		});
 	}
 });
 
@@ -410,6 +420,7 @@ function chooseCharacter(character, isOption1) {
 
 function loadPlayPage(data) {
 	loadHtml(data.html);
+	currentCardHandInfo = data.cardInfo;
 	createCardHand(data.cardInfo);
 	setupTooltip();
 	$("body").css("overflow", "hidden");
@@ -526,6 +537,10 @@ function pickEmporioCard(uid) {
 	socket.emit('emporio_card_picked', username, uid);
 }
 
+function pickClausTheSaintCard(uid) {
+	socket.emit('claus_the_saint_card_picked', username, uid);
+}
+
 function pickKitCarlsonCard(uid) {
 	socket.emit('kit_carlson_card_picked', username, uid);
 	closeInfoModal()
@@ -560,6 +575,13 @@ function setPlayerClicks(clickType='') {
 		if (opponentUsername != username) {
 			$(this).attr("onClick", clickType == '' ? '' : "playerClickedOn('" + opponentUsername + "', '" + clickType + "')");
 		}
+	});
+}
+
+function setAbilityCardClicks(clickType) {
+	$(CARDS_IN_HAND_DIV + " img").each(function() {
+		var uid = $(this).attr("alt").split(' ')[1];
+		$(this).attr("onClick", "abilityCardClickedOn('" + uid + "', '" + clickType + "')");
 	});
 }
 
@@ -612,8 +634,9 @@ function waitingModalIsOpen() {
 }
 
 function emporioModalIsOpen() {
-	return !(isNullOrUndefined($(INFO_MODAL).html())) && $(INFO_MODAL).html().includes("Emporio</h4>") &&
-			!($(INFO_MODAL).html().includes("Everyone is done") || $(INFO_MODAL).html().includes("You picked up"));
+	return !(isNullOrUndefined($(INFO_MODAL).html())) && 
+			(($(INFO_MODAL).html().includes("Emporio</h4>") && !($(INFO_MODAL).html().includes("Everyone is done") || $(INFO_MODAL).html().includes("You picked up")))
+			|| $(INFO_MODAL).html().includes("Claus The Saint</h4>"));
 }
 
 function kitCarlsonModalIsOpen() {
@@ -701,13 +724,19 @@ function rejoinGame() {
 }
 
 function playerClickedOn(targetName, clickType) {
-	console.log("player clicked on 1");
+	console.log("player clicked on");
 	if (new Date().getTime() - previousSocketTime >= (SOCKET_TIME_DIFFERENCE / 2)) {
 		socket.emit('player_clicked_on', username, targetName, clickType);
-		console.log("player clicked on 2");
 		clickingOnPlayer = false;
 		cardsAreBlurred = false;
 		updatePreviousSocketTime();
+	}
+}
+
+function abilityCardClickedOn(uid, clickType) {
+	console.log("ability card clicked on");
+	if (new Date().getTime() - previousSocketTime >= (SOCKET_TIME_DIFFERENCE / 2)) {
+		socket.emit('ability_card_clicked_on', username, uid, clickType);
 	}
 }
 
@@ -741,9 +770,8 @@ $(document).keydown(function (e) {
 				    	lastCardUid = 0;
 			    		clickingOnPlayer = false;
 			    		cardsAreBlurred = false;
-			    		setCardOpacity(false);
+			    		createCardHand(currentCardHandInfo);
 			    		setPlayerClicks();
-			    		resetCardZIndeces();
 				    }
 
 				    else if (e.which == 83) { // Shift-S, to trigger a special ability when applicable.

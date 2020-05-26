@@ -1,0 +1,87 @@
+{
+  "Apache Kid": {
+    "name": "Apache Kid",
+    "numLives": 3,
+    "ability": "Cards of Diamonds played by other players do not affect him."
+  },
+  "Belle Star": {
+    "name": "Belle Star",
+    "numLives": 4,
+    "ability": "During her turn, cards in play in front of other players have no effect."
+  },
+  "Bill Noface": {
+    "name": "Bill Noface",
+    "numLives": 4,
+    "ability": "He draws 1 card, plus 1 card for each wound he has."
+  },
+  "Chuck Wengam": {
+    "name": "Chuck Wengam",
+    "numLives": 4,
+    "ability": "During his turn, he may choose to lose 1 life point to draw 2 cards."
+  },
+  "Claus The Saint": {
+    "name": "Claus The Saint",
+    "numLives": 3,
+    "ability": "He draws one more card than the number of players, keeps 2 for himself, then gives 1 to each player."
+  },
+  "Doc Hollyday": {
+    "name": "Doc Hollyday",
+    "numLives": 4,
+    "ability": "During his turn, he may discard 2 cards from the hand to shoot a Bang."
+  },
+  "Elena Fuente": {
+    "name": "Elena Fuente",
+    "numLives": 3,
+    "ability": "She may use any card as a Missed."
+  },
+  "Greg Digger": {
+    "name": "Greg Digger",
+    "numLives": 4,
+    "ability": "Each time another player is eliminated, he regains 2 life points."
+  },
+  "Herb Hunter": {
+    "name": "Herb Hunter",
+    "numLives": 4,
+    "ability": "Each time another player is eliminated, he draws 2 extra cards."
+  },
+  "Johnny Kisch": {
+    "name": "Johnny Kisch",
+    "numLives": 4,
+    "ability": "Each time he puts a card into play, all other cards in play with the same name are discarded."
+  },
+  "Jose Delgado": {
+    "name": "Jose Delgado",
+    "numLives": 4,
+    "ability": "Twice in his turn, he may discard a blue card from the hand to draw 2 cards."
+  },
+  "Molly Stark": {
+    "name": "Molly Stark",
+    "numLives": 4,
+    "ability": "Each time she uses a card from her hand out of turn, she draws a card."
+  },
+  "Pat Brennan": {
+    "name": "Pat Brennan",
+    "numLives": 4,
+    "ability": "He may draw only one card in play in front of any one player."
+  },
+  "Pixie Pete": {
+    "name": "Pixie Pete",
+    "numLives": 3,
+    "ability": "He draws 3 cards instead of 2."
+  },
+  "Sean Mallory": {
+    "name": "Sean Mallory",
+    "numLives": 3,
+    "ability": "He may hold in his hand up to 10 cards."
+  },
+  "Tequila Joe": {
+    "name": "Tequila Joe",
+    "numLives": 4,
+    "ability": "Each time he plays a Beer, he regains 2 life points instead of 1."
+  },
+  "Uncle Will": {
+    "name": "Uncle Will",
+    "numLives": 4,
+    "ability": "Once during his turn, he may play any card from hand as a General Store."
+  }
+}

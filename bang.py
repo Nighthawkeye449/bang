@@ -258,6 +258,16 @@ def pickEmporioCard(username, uid):
 		with lock:
 			processGameSocketMessage(game, lambda: game.processEmporioCardSelection(username, int(uid)))
 
+@socketio.on(CLAUS_THE_SAINT_CARD_PICKED)
+def pickEmporioCard(username, uid):
+	if validResponse(username, (CLAUS_THE_SAINT_CARD_PICKED, uid)):
+		utils.logServer("Received socket message '{}' from {}: {}.".format(CLAUS_THE_SAINT_CARD_PICKED, username, uid))
+
+		game = getGameForPlayer(username)
+
+		with lock:
+			processGameSocketMessage(game, lambda: game.processClausTheSaintCardSelection(username, int(uid)))
+
 @socketio.on(KIT_CARLSON_CARD_PICKED)
 def pickKitCarlsonCard(username, uid):
 	if validResponse(username, (KIT_CARLSON_CARD_PICKED, uid)):
@@ -277,6 +287,16 @@ def playerClickedOn(username, targetName, clickType):
 
 		with lock:
 			processGameSocketMessage(game, lambda: game.processPlayerClickedOn(username, targetName, clickType))
+
+@socketio.on(ABILITY_CARD_CLICKED_ON)
+def playerClickedOn(username, uid, clickType):
+	if validResponse(username, (ABILITY_CARD_CLICKED_ON, uid, clickType)):
+		utils.logServer("Received socket message '{}' from {}: {}.".format(ABILITY_CARD_CLICKED_ON, username, (uid, clickType)))
+
+		game = getGameForPlayer(username)
+
+		with lock:
+			processGameSocketMessage(game, lambda: game.processAbilityCardClickedOn(username, uid, clickType))
 
 @socketio.on(ENDING_TURN)
 def endingTurn(username):
