@@ -454,7 +454,7 @@ class Gameplay(dict):
 			self.drawCardsForPlayer(player, 2)
 			result = player.cardsInHand[-2:]
 
-		utils.logGameplay("Drew {} cards for {}.".format(len(result), player.username))
+		utils.logGameplay("Drew {} card(s) for {}.".format(len(result), player.username))
 		return result
 
 	def getDiscardTuples(self, card):
@@ -875,8 +875,14 @@ class Gameplay(dict):
 					updateString = "{} drew {} cards. The second card was {}.".format(player.username, len(cardsDrawn), cardsDrawn[1].getDeterminerString())
 				elif player.character.name == PIXIE_PETE:
 					updateString = "{} drew 3 cards from the deck.".format(player.username)
+				elif player.character.name != BILL_NOFACE:
+					updateString = DREW_2_CARDS.format(player.username)
 				else:
 					updateString = DREW_2_CARDS.format(player.username)
+					if len(cardsDrawn) == 1:
+						updateString = updateString.replace("2 cards", "1 card")
+					else:
+						updateString = updateString.replace("2 cards", "{} cards".format(len(cardsDrawn)))
 
 				emitTuples.append(self.createCardsDrawnTuple(player, description, cardsDrawn))
 				emitTuples.extend(self.createUpdates(updateString))
@@ -1363,7 +1369,7 @@ class Gameplay(dict):
 
 				emitTuples.append(utils.createCardsInHandTuple(player, player == self.playerOrder[0]))
 				emitTuples.extend(self.getDiscardTuples(self.getTopDiscardCard()))
-				emitTuples.append(self.createInfoTuple("You drew {} because you lost {}!".format(cardString, lostLivesString), player), cards=player.cardsInHand[-damage:])
+				emitTuples.append(self.createInfoTuple("You drew {} because you lost {}!".format(cardString, lostLivesString), player, cards=player.cardsInHand[-damage:]))
 				emitTuples.extend(self.createUpdates("{} drew {} using Bart Cassidy's ability.".format(player.username, "a card" if damage == 1 else "{} cards".format(damage))))
 
 			elif player.character.name == EL_GRINGO and self.playerOrder[0] != player and attacker != None: # El Gringo draws a card from the player's hand anytime a player deals him damage.
@@ -2381,7 +2387,7 @@ class Gameplay(dict):
 				return utils.createAbilityCardClickTuples(player, JOSE_DELGADO_CLICK)
 
 		else:
-			if card.cardtype not in [BLUE_CARD, GUN_CARD]:
+			if card.cardtype not in [BLUE_CARD, GUN_CARD, SPECIAL_CARD]:
 				return [self.createInfoTuple("That's not a blue card!", player)]
 
 			else:
